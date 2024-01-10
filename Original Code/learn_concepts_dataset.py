@@ -44,7 +44,7 @@ def main():
     for concept_name, loaders in concept_loaders.items():
         pos_loader, neg_loader = loaders['pos'], loaders['neg']
         # Get CAV for each concept using positive/negative image split
-        cav_info = learn_concept_bank(pos_loader, neg_loader, backbone, n_samples, args.C, device="cuda")
+        cav_info = learn_concept_bank(pos_loader, neg_loader, backbone, n_samples, args.C, device=args.device)
         
         # Store CAV train acc, val acc, margin info for each regularization parameter and each concept
         for C in args.C:
