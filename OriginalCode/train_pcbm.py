@@ -7,10 +7,10 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import roc_auc_score
 
 
-from data import get_dataset
-from concepts import ConceptBank
-from models import PosthocLinearCBM, get_model
-from training_tools import load_or_compute_projections
+from .data import get_dataset
+from .concepts import ConceptBank
+from .models import PosthocLinearCBM, get_model
+from .training_tools import load_or_compute_projections
 
 
 def config():
@@ -29,15 +29,15 @@ def config():
     return parser.parse_args()
 
 
-def run_linear_probe(args, train_data, test_data):
+def run_linear_probe(train_data, test_data, **kwargs):
     train_features, train_labels = train_data
     test_features, test_labels = test_data
     
     # We converged to using SGDClassifier. 
     # It's fine to use other modules here, this seemed like the most pedagogical option.
     # We experimented with torch modules etc., and results are mostly parallel.
-    classifier = SGDClassifier(random_state=args.seed, loss="log_loss",
-                               alpha=args.lam, l1_ratio=args.alpha, verbose=0,
+    classifier = SGDClassifier(random_state=kwargs['seed'], loss="log_loss",
+                               alpha=kwargs['lam'], l1_ratio=kwargs['alpha'], verbose=0,
                                penalty="elasticnet", max_iter=10000)
     classifier.fit(train_features, train_labels)
 
@@ -67,38 +67,47 @@ def run_linear_probe(args, train_data, test_data):
     return run_info, classifier.coef_, classifier.intercept_
 
 
+def get_pcbm(**kwargs):
+    all_concepts = pickle.load(open(kwargs['concept_bank'], 'rb'))
+    all_concept_names = list(all_concepts.keys())
+    print(f"Bank path: {kwargs['concept_bank']}. {len(all_concept_names)} concepts will be used.")
+    concept_bank = ConceptBank(all_concepts, kwargs['device'])
 
-def main(args, concept_bank, backbone, preprocess):
-    train_loader, test_loader, idx_to_class, classes = get_dataset(args, preprocess)
+    # Get the backbone from the model zoo.
+    backbone, preprocess = get_model(backbone_name=kwargs['backbone_name'], **kwargs)
+    backbone = backbone.to(kwargs['device'])
+    backbone.eval()
+
+    train_loader, test_loader, idx_to_class, classes = get_dataset(preprocess, **kwargs)
     
     # Get a clean conceptbank string
     # e.g. if the path is /../../cub_resnet-cub_0.1_100.pkl, then the conceptbank string is resnet-cub_0.1_100
     # which means a bank learned with 100 samples per concept with C=0.1 regularization parameter for the SVM. 
     # See `learn_concepts_dataset.py` for details.
-    conceptbank_source = args.concept_bank.split("/")[-1].split(".")[0] 
+    conceptbank_source = kwargs['concept_bank'].split("/")[-1].split(".")[0] 
     num_classes = len(classes)
     
     # Initialize the PCBM module.
-    posthoc_layer = PosthocLinearCBM(concept_bank, backbone_name=args.backbone_name, idx_to_class=idx_to_class, n_classes=num_classes)
-    posthoc_layer = posthoc_layer.to(args.device)
+    posthoc_layer = PosthocLinearCBM(concept_bank, backbone_name=kwargs['backbone_name'], idx_to_class=idx_to_class, n_classes=num_classes)
+    posthoc_layer = posthoc_layer.to(kwargs['device'])
 
     # We compute the projections and save to the output directory. This is to save time in tuning hparams / analyzing projections.
-    train_embs, train_projs, train_lbls, test_embs, test_projs, test_lbls = load_or_compute_projections(args, backbone, posthoc_layer, train_loader, test_loader)
+    train_embs, train_projs, train_lbls, test_embs, test_projs, test_lbls = load_or_compute_projections(backbone, posthoc_layer, train_loader, test_loader, **kwargs)
     
-    run_info, weights, bias = run_linear_probe(args, (train_projs, train_lbls), (test_projs, test_lbls))
+    run_info, weights, bias = run_linear_probe((train_projs, train_lbls), (test_projs, test_lbls), **kwargs)
     
     # Convert from the SGDClassifier module to PCBM module.
     posthoc_layer.set_weights(weights=weights, bias=bias)
 
     # Sorry for the model path hack. Probably i'll change this later.
-    model_path = os.path.join(args.out_dir,
-                              f"pcbm_{args.dataset}__{args.backbone_name}__{conceptbank_source}__lam:{args.lam}__alpha:{args.alpha}__seed:{args.seed}.ckpt")
+    model_path = os.path.join(kwargs['out_dir'],
+                              f"pcbm_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}__lam:{kwargs['lam']}__alpha:{kwargs['alpha']}__seed:{kwargs['seed']}.ckpt")
     torch.save(posthoc_layer, model_path)
 
     # Again, a sad hack.. Open to suggestions
     run_info_file = model_path.replace("pcbm", "run_info-pcbm")
     run_info_file = run_info_file.replace(".ckpt", ".pkl")
-    run_info_file = os.path.join(args.out_dir, run_info_file)
+    run_info_file = os.path.join(kwargs['out_dir'], run_info_file)
     
     with open(run_info_file, "wb") as f:
         pickle.dump(run_info, f)
@@ -111,15 +120,11 @@ def main(args, concept_bank, backbone, preprocess):
     print(f"Model saved to : {model_path}")
     print(run_info)
 
-if __name__ == "__main__":
-    args = config()
-    all_concepts = pickle.load(open(args.concept_bank, 'rb'))
-    all_concept_names = list(all_concepts.keys())
-    print(f"Bank path: {args.concept_bank}. {len(all_concept_names)} concepts will be used.")
-    concept_bank = ConceptBank(all_concepts, args.device)
 
-    # Get the backbone from the model zoo.
-    backbone, preprocess = get_model(args, backbone_name=args.backbone_name)
-    backbone = backbone.to(args.device)
-    backbone.eval()
-    main(args, concept_bank, backbone, preprocess)
+def main():
+    args = config()
+    get_pcbm(concept_bank=args.concept_bank, out_dir=args.out_dir, dataset=args.dataset, backbone_name=args.backbone_name, device=args.device, seed=args.seed, 
+             batch_size=args.batch_size, num_workers=args.num_workers, alpha=args.alpha, lam=args.lam, lr=args.lr)
+
+if __name__ == "__main__":
+    main()

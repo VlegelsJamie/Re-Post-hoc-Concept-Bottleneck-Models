@@ -8,6 +8,9 @@ import numpy as np
 from tqdm import tqdm
 
 
+concept_cache = {}
+
+
 def config():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out-dir", required=True, type=str)
@@ -66,7 +69,7 @@ def get_single_concept_data(cls_name):
     
     concept_cache[cls_name] = all_concepts
     
-    return all_concepts
+    return all_concepts, concept_cache
 
 
 def get_concept_data(all_classes):
@@ -115,7 +118,7 @@ def clean_concepts(scenario_concepts):
 
 
 @torch.no_grad()
-def learn_conceptbank(args, concept_list, scenario):
+def learn_conceptbank(model, concept_list, scenario, **kwargs):
     concept_dict = {}
     for concept in tqdm(concept_list):
         # Note: You can try other forms of prompting, e.g. "photo of {concept}" etc. here.
@@ -127,20 +130,18 @@ def learn_conceptbank(args, concept_list, scenario):
         concept_dict[concept] = (text_features, None, None, 0, {})
 
     print(f"# concepts: {len(concept_dict)}")
-    concept_dict_path = os.path.join(args.out_dir, f"multimodal_concept_{args.backbone_name}_{scenario}_recurse:{args.recurse}.pkl")
+    concept_dict_path = os.path.join(kwargs['out_dir'], f"multimodal_concept_{kwargs['backbone_name']}_{scenario}_recurse:{kwargs['recurse']}.pkl")
     pickle.dump(concept_dict, open(concept_dict_path, 'wb'))
     print(f"Dumped to : {concept_dict_path}")
 
 
-if __name__ == "__main__":
-    args = config()
-    model, _ = clip.load(args.backbone_name.split(":")[1], device=args.device, download_root=args.out_dir)
-    concept_cache = {}
+def get_concepts_multimodal(**kwargs):
+    model, _ = clip.load(kwargs['backbone_name'].split(":")[1], device=kwargs['device'], download_root=kwargs['out_dir'])
     
-    if args.classes == "cifar10":
+    if kwargs['classes'] == "cifar10":
         # Pull CIFAR10 to get the class names.
         from torchvision import datasets
-        cifar10_ds = datasets.CIFAR10(root=args.out_dir, train=True, download=True)
+        cifar10_ds = datasets.CIFAR10(root=kwargs['out_dir'], train=True, download=True)
         # Get the class names.
         all_classes = list(cifar10_ds.classes)
         # Get the names of all concepts.
@@ -149,28 +150,37 @@ if __name__ == "__main__":
         all_concepts = clean_concepts(all_concepts)     
         all_concepts = list(set(all_concepts).difference(set(all_classes)))
         # If we'd like to recurse in the conceptnet graph, specify `recurse > 1`.
-        for i in range(1, args.recurse):
+        for i in range(1, kwargs['recurse']):
             all_concepts = get_concept_data(all_concepts)
             all_concepts = list(set(all_concepts))
             all_concepts = clean_concepts(all_concepts)
             all_concepts = list(set(all_concepts).difference(set(all_classes)))
         # Generate the concept bank.
-        learn_conceptbank(args, all_concepts, args.classes)
+        learn_conceptbank(model, all_concepts, kwargs['classes'], **kwargs)
         
-    elif args.classes == "cifar100":
+    elif kwargs['classes'] == "cifar100":
         from torchvision import datasets
-        cifar100_ds = datasets.CIFAR100(root=args.out_dir, train=True, download=True)
+        cifar100_ds = datasets.CIFAR100(root=kwargs['out_dir'], train=True, download=True)
         all_classes = list(cifar100_ds.classes)
         all_concepts = get_concept_data(all_classes)
         all_concepts = clean_concepts(all_concepts)
         all_concepts = list(set(all_concepts).difference(set(all_classes)))
         # If we'd like to recurse in the conceptnet graph, specify `recurse > 1`.
-        for i in range(1, args.recurse):
+        for i in range(1, kwargs['recurse']):
             all_concepts = get_concept_data(all_concepts)
             all_concepts = list(set(all_concepts))
             all_concepts = clean_concepts(all_concepts)
             all_concepts = list(set(all_concepts).difference(set(all_classes)))
-        learn_conceptbank(args, all_concepts, args.classes)
+        learn_conceptbank(model, all_concepts, kwargs['classes'], **kwargs)
 
     else:
-        raise ValueError(f"Unknown classes: {args.classes}. Define your dataset here!")
+        raise ValueError(f"Unknown classes: {kwargs['classes']}. Define your dataset here!")
+
+
+def main():
+    args = config()
+    get_concepts_multimodal(out_dir=args.out_dir, classes=args.classes, backbone_name=args.backbone_name, device=args.device, recurse=args.recurse)
+
+
+if __name__ == "__main__":
+    main()

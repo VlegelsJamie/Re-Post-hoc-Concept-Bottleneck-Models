@@ -26,18 +26,18 @@ class ResNetTop(nn.Module):
         return x
 
 
-def get_model(args, backbone_name="resnet18_cub", full_model=False):
+def get_model(backbone_name="resnet18_cub", full_model=False, **kwargs):
     if "clip" in backbone_name:
         import clip
         # We assume clip models are passed of the form : clip:RN50
         clip_backbone_name = backbone_name.split(":")[1]
-        backbone, preprocess = clip.load(clip_backbone_name, device=args.device, download_root=args.out_dir)
+        backbone, preprocess = clip.load(clip_backbone_name, device=kwargs['device'], download_root=kwargs['out_dir'])
         backbone = backbone.eval()
         model = None
     
     elif backbone_name == "resnet18_cub":
         from pytorchcv.model_provider import get_model as ptcv_get_model
-        model = ptcv_get_model(backbone_name, pretrained=True, root=args.out_dir)
+        model = ptcv_get_model(backbone_name, pretrained=True, root=kwargs['out_dir'])
         backbone, model_top = ResNetBottom(model), ResNetTop(model)
         cub_mean_pxs = np.array([0.5, 0.5, 0.5])
         cub_std_pxs = np.array([2., 2., 2.])
@@ -49,7 +49,7 @@ def get_model(args, backbone_name="resnet18_cub", full_model=False):
     
     elif backbone_name.lower() == "ham10000_inception":
         from .derma_models import get_derma_model
-        model, backbone, model_top = get_derma_model(args, backbone_name.lower())
+        model, backbone, model_top = get_derma_model(backbone_name.lower(), **kwargs)
         preprocess = transforms.Compose([
                         transforms.Resize(299),
                         transforms.CenterCrop(299),
@@ -63,5 +63,6 @@ def get_model(args, backbone_name="resnet18_cub", full_model=False):
         return model, backbone, preprocess
     else:
         return backbone, preprocess
+
 
 

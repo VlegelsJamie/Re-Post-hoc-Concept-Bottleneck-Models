@@ -10,10 +10,10 @@ from torch.utils.data import DataLoader, TensorDataset
 from scipy.special import softmax
 from sklearn.metrics import roc_auc_score
 
-from data import get_dataset
-from concepts import ConceptBank
-from models import PosthocLinearCBM, PosthocHybridCBM, get_model
-from training_tools import load_or_compute_projections, AverageMeter, MetricComputer
+from .data import get_dataset
+from .concepts import ConceptBank
+from .models import PosthocLinearCBM, PosthocHybridCBM, get_model
+from .training_tools import load_or_compute_projections, AverageMeter, MetricComputer
 
 
 
@@ -33,7 +33,7 @@ def config():
 
 
 @torch.no_grad()
-def eval_model(args, posthoc_layer, loader, num_classes):
+def eval_model(posthoc_layer, loader, num_classes, **kwargs):
     epoch_summary = {"Accuracy": AverageMeter()}
     tqdm_loader = tqdm(loader)
     computer = MetricComputer(n_classes=num_classes)
@@ -41,7 +41,7 @@ def eval_model(args, posthoc_layer, loader, num_classes):
     all_labels = []
     
     for batch_X, batch_Y in tqdm(loader):
-        batch_X, batch_Y = batch_X.to(args.device), batch_Y.to(args.device) 
+        batch_X, batch_Y = batch_X.to(kwargs['device']), batch_Y.to(kwargs['device']) 
         out = posthoc_layer(batch_X)            
         all_preds.append(out.detach().cpu().numpy())
         all_labels.append(batch_Y.detach().cpu().numpy())
@@ -59,20 +59,20 @@ def eval_model(args, posthoc_layer, loader, num_classes):
     return epoch_summary["Accuracy"]
 
 
-def train_hybrid(args, train_loader, val_loader, posthoc_layer, optimizer, num_classes):
+def train_hybrid(train_loader, val_loader, posthoc_layer, optimizer, num_classes, **kwargs):
     cls_criterion = nn.CrossEntropyLoss()
-    for epoch in range(1, args.num_epochs+1):
+    for epoch in range(1, kwargs['num_epochs']+1):
         print(f"Epoch: {epoch}")
         epoch_summary = {"CELoss": AverageMeter(),
                          "Accuracy": AverageMeter()}
         tqdm_loader = tqdm(train_loader)
         computer = MetricComputer(n_classes=num_classes)
         for batch_X, batch_Y in tqdm(train_loader):
-            batch_X, batch_Y = batch_X.to(args.device), batch_Y.to(args.device)
+            batch_X, batch_Y = batch_X.to(kwargs['device']), batch_Y.to(kwargs['device'])
             optimizer.zero_grad()
             out, projections = posthoc_layer(batch_X, return_dist=True)
             cls_loss = cls_criterion(out, batch_Y)
-            loss = cls_loss + args.l2_penalty*(posthoc_layer.residual_classifier.weight**2).mean()
+            loss = cls_loss + kwargs['l2_penalty']*(posthoc_layer.residual_classifier.weight**2).mean()
             loss.backward()
             optimizer.step()
             
@@ -86,42 +86,48 @@ def train_hybrid(args, train_loader, val_loader, posthoc_layer, optimizer, num_c
         
         latest_info = dict()
         latest_info["epoch"] = epoch
-        latest_info["args"] = args
+        latest_info["args"] = kwargs
         latest_info["train_acc"] = epoch_summary["Accuracy"]
-        latest_info["test_acc"] = eval_model(args, posthoc_layer, val_loader, num_classes)
+        latest_info["test_acc"] = eval_model(posthoc_layer, val_loader, num_classes, **kwargs)
         print("Final test acc: ", latest_info["test_acc"])
     return latest_info
 
 
+def get_pcbm_h(**kwargs):
+    # Load the PCBM
+    posthoc_layer = torch.load(kwargs['pcbm_path'])
+    posthoc_layer = posthoc_layer.eval()
+    backbone_name = posthoc_layer.backbone_name
+    backbone, preprocess = get_model(backbone_name=backbone_name, **kwargs)
+    backbone = backbone.to(kwargs['device'])
+    backbone.eval()
 
-def main(args, backbone, preprocess):
-    train_loader, test_loader, idx_to_class, classes = get_dataset(args, preprocess)
+    train_loader, test_loader, idx_to_class, classes = get_dataset(preprocess, **kwargs)
     num_classes = len(classes)
     
-    hybrid_model_path = args.pcbm_path.replace("pcbm_", "pcbm-hybrid_")
+    hybrid_model_path = kwargs['pcbm_path'].replace("pcbm_", "pcbm-hybrid_")
     run_info_file = hybrid_model_path.replace("pcbm", "run_info-pcbm")
     run_info_file = run_info_file.replace(".ckpt", ".pkl")
     
-    run_info_file = os.path.join(args.out_dir, run_info_file)
+    run_info_file = os.path.join(kwargs['out_dir'], run_info_file)
     
     # We use the precomputed embeddings and projections.
-    train_embs, _, train_lbls, test_embs, _, test_lbls = load_or_compute_projections(args, backbone, posthoc_layer, train_loader, test_loader)
+    train_embs, _, train_lbls, test_embs, _, test_lbls = load_or_compute_projections(backbone, posthoc_layer, train_loader, test_loader, **kwargs)
 
-    
-    train_loader = DataLoader(TensorDataset(torch.tensor(train_embs).float(), torch.tensor(train_lbls).long()), batch_size=args.batch_size, shuffle=True)
-    test_loader = DataLoader(TensorDataset(torch.tensor(test_embs).float(), torch.tensor(test_lbls).long()), batch_size=args.batch_size, shuffle=False)
+    train_loader = DataLoader(TensorDataset(torch.tensor(train_embs).float(), torch.tensor(train_lbls).long()), batch_size=kwargs['batch_size'], shuffle=True)
+    test_loader = DataLoader(TensorDataset(torch.tensor(test_embs).float(), torch.tensor(test_lbls).long()), batch_size=kwargs['batch_size'], shuffle=False)
 
     # Initialize PCBM-h
     hybrid_model = PosthocHybridCBM(posthoc_layer)
-    hybrid_model = hybrid_model.to(args.device)
+    hybrid_model = hybrid_model.to(kwargs['device'])
     
     # Initialize the optimizer
-    hybrid_optimizer = torch.optim.Adam(hybrid_model.residual_classifier.parameters(), lr=args.lr)
+    hybrid_optimizer = torch.optim.Adam(hybrid_model.residual_classifier.parameters(), lr=kwargs['lr'])
     hybrid_model.residual_classifier = hybrid_model.residual_classifier.float()
     hybrid_model.bottleneck = hybrid_model.bottleneck.float()
     
     # Train PCBM-h
-    run_info = train_hybrid(args, train_loader, test_loader, hybrid_model, hybrid_optimizer, num_classes)
+    run_info = train_hybrid(train_loader, test_loader, hybrid_model, hybrid_optimizer, num_classes, **kwargs)
 
     torch.save(hybrid_model, hybrid_model_path)
     with open(run_info_file, "wb") as f:
@@ -129,13 +135,12 @@ def main(args, backbone, preprocess):
     
     print(f"Saved to {hybrid_model_path}, {run_info_file}")
 
+
+def main():
+    args = config()
+    get_pcbm_h(out_dir=args.out_dir, pcbm_path=args.pcbm_path, concept_bank=args.concept_bank, device=args.device, batch_size=args.batch_size, 
+               dataset=args.dataset, seed=args.seed, num_epochs=args.num_epochs, lr=args.lr, l2_penalty=args.l2_penalty)
+    
+
 if __name__ == "__main__":    
-    args = config()    
-    # Load the PCBM
-    posthoc_layer = torch.load(args.pcbm_path)
-    posthoc_layer = posthoc_layer.eval()
-    args.backbone_name = posthoc_layer.backbone_name
-    backbone, preprocess = get_model(args, backbone_name=args.backbone_name)
-    backbone = backbone.to(args.device)
-    backbone.eval()
-    main(args, backbone, preprocess)
+    main()

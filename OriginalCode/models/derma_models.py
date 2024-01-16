@@ -131,8 +131,8 @@ class InceptionTop(nn.Module):
         return x
 
 
-def get_derma_model(args, backbone_name="ham10000"):
-    model = load_model(backbone_name.upper(), save_dir=args.out_dir)
+def get_derma_model(backbone_name="ham10000", **kwargs):
+    model = load_model(backbone_name.upper(), save_dir=kwargs["out_dir"])
     model = model.to("cuda")
     model = model.eval()
     model_bottom, model_top = InceptionBottom(model), InceptionTop(model)
