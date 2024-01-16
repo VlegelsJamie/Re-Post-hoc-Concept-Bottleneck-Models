@@ -1,9 +1,9 @@
-from OriginalCode import get_concepts_dataset
+from original_code import get_concepts_dataset
 
 # Set your parameters
 backbone_name = "clip:RN50"
 dataset_name = "broden"
-out_dir = "/conceptbanks/"
+out_dir = "../concept_banks/"
 device = "cuda"  # or "cpu" if you don't have a GPU
 seed = 1
 num_workers = 4
