@@ -15,6 +15,7 @@ from .training_tools import load_or_compute_projections
 
 def config():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--baseline", default=False, type=bool, help="Compute baseline?")
     parser.add_argument("--concept-bank", required=True, type=str, help="Path to the concept bank")
     parser.add_argument("--out-dir", required=True, type=str, help="Output folder for model/run info.")
     parser.add_argument("--dataset", default="cub", type=str)
@@ -25,11 +26,58 @@ def config():
     parser.add_argument("--num-workers", default=4, type=int)
     parser.add_argument("--alpha", default=0.99, type=float, help="Sparsity coefficient for elastic net.")
     parser.add_argument("--lam", default=1e-5, type=float, help="Regularization strength.")
-    parser.add_argument("--lr", default=1e-3, type=float)
     return parser.parse_args()
 
 
-def run_linear_probe(train_data, test_data, **kwargs):
+def evaluate_backbone(model, train_loader, test_loader, device):
+    train_predictions, train_labels = [], []
+    test_predictions, test_labels = [], []
+
+    with torch.no_grad():  # Disable gradient computation
+        # Evaluate on train data
+        for batch in train_loader:
+            batch_X, batch_Y = batch
+            batch_X = batch_X.to(device)
+            outputs = model(batch_X)
+            train_predictions.extend(outputs.cpu().numpy())
+            train_labels.extend(batch_Y.numpy())
+
+        # Evaluate on test data
+        for batch in test_loader:
+            batch_X, batch_Y = batch
+            batch_X = batch_X.to(device)
+            outputs = model(batch_X)
+            test_predictions.extend(outputs.cpu().numpy())
+            test_labels.extend(batch_Y.numpy())
+
+    # Convert to numpy arrays
+    train_predictions = np.array(train_predictions)
+    train_labels = np.array(train_labels)
+    test_predictions = np.array(test_predictions)
+    test_labels = np.array(test_labels)
+
+    # Calculate accuracies
+    train_accuracy = np.mean((train_labels == np.argmax(train_predictions, axis=1)).astype(float)) * 100.
+    test_accuracy = np.mean((test_labels == np.argmax(test_predictions, axis=1)).astype(float)) * 100.
+
+    # Compute class-level accuracies
+    cls_acc = {"train": {}, "test": {}}
+    for lbl in np.unique(train_labels):
+        train_lbl_mask = train_labels == lbl
+        test_lbl_mask = test_labels == lbl
+        cls_acc["train"][lbl] = np.mean((train_labels[train_lbl_mask] == np.argmax(train_predictions[train_lbl_mask], axis=1)).astype(float))
+        cls_acc["test"][lbl] = np.mean((test_labels[test_lbl_mask] == np.argmax(test_predictions[test_lbl_mask], axis=1)).astype(float))
+
+    # Compute AUC for binary tasks
+    run_info = {"train_acc": train_accuracy, "test_acc": test_accuracy, "cls_acc": cls_acc}
+    if test_labels.max() == 1:
+        run_info["test_auc"] = roc_auc_score(test_labels, train_predictions[:, 1])
+        run_info["train_auc"] = roc_auc_score(train_labels, test_predictions[:, 1])
+
+    return run_info
+
+
+def run_linear_probe(train_data, test_data, norm, **kwargs):
     train_features, train_labels = train_data
     test_features, test_labels = test_data
     
@@ -37,8 +85,8 @@ def run_linear_probe(train_data, test_data, **kwargs):
     # It's fine to use other modules here, this seemed like the most pedagogical option.
     # We experimented with torch modules etc., and results are mostly parallel.
     classifier = SGDClassifier(random_state=kwargs['seed'], loss="log_loss",
-                               alpha=kwargs['lam'], l1_ratio=kwargs['alpha'], verbose=0,
-                               penalty="elasticnet", max_iter=10000)
+                               alpha=kwargs['lam'] / norm, l1_ratio=kwargs['alpha'], verbose=0,
+                               penalty="elasticnet", max_iter=5000)
     classifier.fit(train_features, train_labels)
 
     train_predictions = classifier.predict(train_features)
@@ -64,17 +112,23 @@ def run_linear_probe(train_data, test_data, **kwargs):
     if test_labels.max() == 1:
         run_info["test_auc"] = roc_auc_score(test_labels, classifier.decision_function(test_features))
         run_info["train_auc"] = roc_auc_score(train_labels, classifier.decision_function(train_features))
-    return run_info, classifier.coef_, classifier.intercept_
+    return run_info, classifier
 
 
 def get_pcbm(**kwargs):
     all_concepts = pickle.load(open(kwargs['concept_bank'], 'rb'))
     all_concept_names = list(all_concepts.keys())
-    print(f"Bank path: {kwargs['concept_bank']}. {len(all_concept_names)} concepts will be used.")
+    num_concepts = len(all_concept_names)
+    print(f"Bank path: {kwargs['concept_bank']}. {num_concepts} concepts will be used.")
     concept_bank = ConceptBank(all_concepts, kwargs['device'])
 
     # Get the backbone from the model zoo.
-    backbone, preprocess = get_model(backbone_name=kwargs['backbone_name'], **kwargs)
+    if kwargs['baseline']:
+        model, backbone, preprocess = get_model(**kwargs)
+        model = model.to(kwargs['device'])
+        model.eval()
+    else:
+        backbone, preprocess = get_model(**kwargs)
     backbone = backbone.to(kwargs['device'])
     backbone.eval()
 
@@ -84,8 +138,9 @@ def get_pcbm(**kwargs):
     # e.g. if the path is /../../cub_resnet-cub_0.1_100.pkl, then the conceptbank string is resnet-cub_0.1_100
     # which means a bank learned with 100 samples per concept with C=0.1 regularization parameter for the SVM. 
     # See `learn_concepts_dataset.py` for details.
-    conceptbank_source = kwargs['concept_bank'].split("/")[-1].split(".")[0] 
+    conceptbank_source = kwargs['concept_bank'].split("/")[-1].split("_")[0] 
     num_classes = len(classes)
+    norm = num_concepts * num_classes
     
     # Initialize the PCBM module.
     posthoc_layer = PosthocLinearCBM(concept_bank, backbone_name=kwargs['backbone_name'], idx_to_class=idx_to_class, n_classes=num_classes)
@@ -93,38 +148,58 @@ def get_pcbm(**kwargs):
 
     # We compute the projections and save to the output directory. This is to save time in tuning hparams / analyzing projections.
     train_embs, train_projs, train_lbls, test_embs, test_projs, test_lbls = load_or_compute_projections(backbone, posthoc_layer, train_loader, test_loader, **kwargs)
+
+    # Compute baseline by training a linear probe on the embeddings of backbone model.
+    if kwargs['baseline']:
+        if kwargs["backbone_name"] == "resnet18_cub" or kwargs["backbone_name"] == "ham10000_inception":
+            run_info_baseline = evaluate_backbone(model, train_loader, test_loader, kwargs['device'])
+        else:
+            run_info_baseline, classifier_baseline = run_linear_probe((train_embs, train_lbls), (test_embs, test_lbls), norm, **kwargs)
+
+            # Save the baseline model.
+            model_baseline_path = os.path.join('baselines/',
+                                f"baseline_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.ckpt")
+            with open(model_baseline_path, "wb") as f:
+                pickle.dump(classifier_baseline, f)
+
+        run_info_file_baseline = os.path.join('baselines/',
+                              f"run_info-baseline_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.pkl")
+        with open(run_info_file_baseline, "wb") as f:
+            pickle.dump(run_info_baseline, f)
+
+        print(f"Baseline model saved to : {model_baseline_path}")
+        print(run_info_baseline)
     
-    run_info, weights, bias = run_linear_probe((train_projs, train_lbls), (test_projs, test_lbls), **kwargs)
+    run_info_pcbm, classifier_pcbm = run_linear_probe((train_projs, train_lbls), (test_projs, test_lbls), norm, **kwargs)
     
     # Convert from the SGDClassifier module to PCBM module.
-    posthoc_layer.set_weights(weights=weights, bias=bias)
+    posthoc_layer.set_weights(weights=classifier_pcbm.coef_, bias=classifier_pcbm.intercept_)
 
     # Sorry for the model path hack. Probably i'll change this later.
-    model_path = os.path.join(kwargs['out_dir'],
-                              f"pcbm_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}__lam:{kwargs['lam']}__alpha:{kwargs['alpha']}__seed:{kwargs['seed']}.ckpt")
-    torch.save(posthoc_layer, model_path)
+    model_pcbm_path = os.path.join(kwargs['out_dir'],
+                              f"pcbm_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.ckpt")
+    torch.save(posthoc_layer, model_pcbm_path)
 
     # Again, a sad hack.. Open to suggestions
-    run_info_file = model_path.replace("pcbm", "run_info-pcbm")
-    run_info_file = run_info_file.replace(".ckpt", ".pkl")
-    run_info_file = os.path.join(kwargs['out_dir'], run_info_file)
-    
+    run_info_file = os.path.join(kwargs['out_dir'],
+                              f"run_info-pcbm_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.pkl")
     with open(run_info_file, "wb") as f:
-        pickle.dump(run_info, f)
+        pickle.dump(run_info_pcbm, f)
 
-    
     if num_classes > 1:
         # Prints the Top-5 Concept Weigths for each class.
         print(posthoc_layer.analyze_classifier(k=5))
 
-    print(f"Model saved to : {model_path}")
-    print(run_info)
+    print(f"Model saved to : {model_pcbm_path}")
+    print(run_info_pcbm)
+
+    return run_info_pcbm, run_info_baseline
 
 
 def main():
     args = config()
-    get_pcbm(concept_bank=args.concept_bank, out_dir=args.out_dir, dataset=args.dataset, backbone_name=args.backbone_name, device=args.device, seed=args.seed, 
-             batch_size=args.batch_size, num_workers=args.num_workers, alpha=args.alpha, lam=args.lam, lr=args.lr)
+    get_pcbm(baseline=args.baseline, concept_bank=args.concept_bank, out_dir=args.out_dir, dataset=args.dataset, backbone_name=args.backbone_name, device=args.device, 
+             seed=args.seed, batch_size=args.batch_size, num_workers=args.num_workers, alpha=args.alpha, lam=args.lam)
 
 if __name__ == "__main__":
     main()
