@@ -69,7 +69,7 @@ def get_single_concept_data(cls_name):
     
     concept_cache[cls_name] = all_concepts
     
-    return all_concepts, concept_cache
+    return all_concepts
 
 
 def get_concept_data(all_classes):
@@ -136,7 +136,8 @@ def learn_conceptbank(model, concept_list, scenario, **kwargs):
 
 
 def get_concepts_multimodal(**kwargs):
-    model, _ = clip.load(kwargs['backbone_name'].split(":")[1], device=kwargs['device'], download_root=kwargs['out_dir'])
+    clip_backbone_name = kwargs['backbone_name'].split("-")[1]
+    model, _ = clip.load(clip_backbone_name, device=kwargs['device'], download_root=kwargs['out_dir'])
     
     if kwargs['classes'] == "cifar10":
         # Pull CIFAR10 to get the class names.

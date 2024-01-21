@@ -29,8 +29,8 @@ class ResNetTop(nn.Module):
 def get_model(backbone_name="resnet18_cub", full_model=False, **kwargs):
     if "clip" in backbone_name:
         import clip
-        # We assume clip models are passed of the form : clip:RN50
-        clip_backbone_name = backbone_name.split(":")[1]
+        # We assume clip models are passed of the form - clip:RN50
+        clip_backbone_name = backbone_name.split("-")[1]
         backbone, preprocess = clip.load(clip_backbone_name, device=kwargs['device'], download_root=kwargs['out_dir'])
         backbone = backbone.eval()
         model = None

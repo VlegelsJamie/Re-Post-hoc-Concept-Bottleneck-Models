@@ -24,6 +24,7 @@ def config():
     parser.add_argument("--concept-bank", required=True, type=str, help="Path to the concept bank.")
     parser.add_argument("--device", default="cuda", type=str)
     parser.add_argument("--batch-size", default=64, type=int)
+    parser.add_argument("--num-workers", default=4, type=int)
     parser.add_argument("--dataset", default="cub", type=str)
     parser.add_argument("--seed", default=42, type=int, help="Random seed")
     parser.add_argument("--num-epochs", default=20, type=int)
@@ -56,7 +57,7 @@ def eval_model(posthoc_layer, loader, num_classes, **kwargs):
     if all_labels.max() == 1:
         auc = roc_auc_score(all_labels, softmax(all_preds, axis=1)[:, 1])
         return auc
-    return epoch_summary["Accuracy"]
+    return epoch_summary["Accuracy"].avg
 
 
 def train_hybrid(train_loader, val_loader, posthoc_layer, optimizer, num_classes, **kwargs):
@@ -97,19 +98,13 @@ def get_pcbm_h(**kwargs):
     # Load the PCBM
     posthoc_layer = torch.load(kwargs['pcbm_path'])
     posthoc_layer = posthoc_layer.eval()
-    backbone_name = posthoc_layer.backbone_name
-    backbone, preprocess = get_model(backbone_name=backbone_name, **kwargs)
+    kwargs['backbone_name'] = posthoc_layer.backbone_name
+    backbone, preprocess = get_model(**kwargs)
     backbone = backbone.to(kwargs['device'])
     backbone.eval()
 
     train_loader, test_loader, idx_to_class, classes = get_dataset(preprocess, **kwargs)
     num_classes = len(classes)
-    
-    hybrid_model_path = kwargs['pcbm_path'].replace("pcbm_", "pcbm-hybrid_")
-    run_info_file = hybrid_model_path.replace("pcbm", "run_info-pcbm")
-    run_info_file = run_info_file.replace(".ckpt", ".pkl")
-    
-    run_info_file = os.path.join(kwargs['out_dir'], run_info_file)
     
     # We use the precomputed embeddings and projections.
     train_embs, _, train_lbls, test_embs, _, test_lbls = load_or_compute_projections(backbone, posthoc_layer, train_loader, test_loader, **kwargs)
@@ -128,12 +123,20 @@ def get_pcbm_h(**kwargs):
     
     # Train PCBM-h
     run_info = train_hybrid(train_loader, test_loader, hybrid_model, hybrid_optimizer, num_classes, **kwargs)
-
+    
+    conceptbank_source = kwargs['concept_bank'].split("/")[-1].split(".")[0]
+    hybrid_model_path = os.path.join(kwargs['out_dir'],
+                              f"pcbm-hybrid_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}__lr-{kwargs['lr']}__l2_penalty-{kwargs['l2_penalty']}__seed-{kwargs['seed']}.ckpt")
     torch.save(hybrid_model, hybrid_model_path)
+
+    run_info_file = os.path.join(kwargs['out_dir'],
+                            f"run_info-pcbm-hybrid_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}__lr-{kwargs['lr']}__l2_penalty-{kwargs['l2_penalty']}__seed-{kwargs['seed']}.pkl")
     with open(run_info_file, "wb") as f:
         pickle.dump(run_info, f)
     
     print(f"Saved to {hybrid_model_path}, {run_info_file}")
+
+    return run_info
 
 
 def main():
