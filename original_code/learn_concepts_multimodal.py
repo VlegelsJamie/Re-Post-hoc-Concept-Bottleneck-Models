@@ -11,16 +11,6 @@ from tqdm import tqdm
 concept_cache = {}
 
 
-def config():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--out-dir", required=True, type=str)
-    parser.add_argument("--classes", default="cifar10", type=str)
-    parser.add_argument("--backbone-name", default="clip:RN50", type=str)
-    parser.add_argument("--device", default="cuda", type=str)
-    parser.add_argument("--recurse", default=1, type=int, help="How many times to recurse on the conceptnet graph")
-    return parser.parse_args()
-
-
 def get_single_concept_data(cls_name):
     if cls_name in concept_cache:
         return concept_cache[cls_name]
@@ -176,12 +166,3 @@ def get_concepts_multimodal(**kwargs):
 
     else:
         raise ValueError(f"Unknown classes: {kwargs['classes']}. Define your dataset here!")
-
-
-def main():
-    args = config()
-    get_concepts_multimodal(out_dir=args.out_dir, classes=args.classes, backbone_name=args.backbone_name, device=args.device, recurse=args.recurse)
-
-
-if __name__ == "__main__":
-    main()

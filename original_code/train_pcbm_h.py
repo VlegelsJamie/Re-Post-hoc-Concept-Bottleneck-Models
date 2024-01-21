@@ -16,23 +16,6 @@ from .models import PosthocLinearCBM, PosthocHybridCBM, get_model
 from .training_tools import load_or_compute_projections, AverageMeter, MetricComputer
 
 
-
-def config():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--out-dir", required=True, type=str, help="Output folder")
-    parser.add_argument("--pcbm-path", required=True, type=str, help="Trained PCBM module.")
-    parser.add_argument("--concept-bank", required=True, type=str, help="Path to the concept bank.")
-    parser.add_argument("--device", default="cuda", type=str)
-    parser.add_argument("--batch-size", default=64, type=int)
-    parser.add_argument("--num-workers", default=4, type=int)
-    parser.add_argument("--dataset", default="cub", type=str)
-    parser.add_argument("--seed", default=42, type=int, help="Random seed")
-    parser.add_argument("--num-epochs", default=20, type=int)
-    parser.add_argument("--lr", default=0.01, type=float)
-    parser.add_argument("--l2-penalty", default=0.001, type=float)
-    return parser.parse_args()
-
-
 @torch.no_grad()
 def eval_model(posthoc_layer, loader, num_classes, **kwargs):
     epoch_summary = {"Accuracy": AverageMeter()}
@@ -137,13 +120,3 @@ def get_pcbm_h(**kwargs):
     print(f"Saved to {hybrid_model_path}, {run_info_file}")
 
     return run_info
-
-
-def main():
-    args = config()
-    get_pcbm_h(out_dir=args.out_dir, pcbm_path=args.pcbm_path, concept_bank=args.concept_bank, device=args.device, batch_size=args.batch_size, 
-               dataset=args.dataset, seed=args.seed, num_epochs=args.num_epochs, lr=args.lr, l2_penalty=args.l2_penalty)
-    
-
-if __name__ == "__main__":    
-    main()

@@ -102,7 +102,7 @@ def main():
         train_pcbm_h(seed)
     
     # Save results to a JSON file
-    save_results(test_accs, "results/test_accuracy_results_reproduction.json")
+    save_results(test_accs, "results/test_accuracy_conceptbank_reproduction.json")
         
 
 if __name__ == "__main__":

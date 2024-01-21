@@ -13,42 +13,26 @@ from .models import PosthocLinearCBM, get_model
 from .training_tools import load_or_compute_projections
 
 
-def config():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--baseline", default=False, type=bool, help="Compute baseline?")
-    parser.add_argument("--concept-bank", required=True, type=str, help="Path to the concept bank")
-    parser.add_argument("--out-dir", required=True, type=str, help="Output folder for model/run info.")
-    parser.add_argument("--dataset", default="cub", type=str)
-    parser.add_argument("--backbone-name", default="resnet18_cub", type=str)
-    parser.add_argument("--device", default="cuda", type=str)
-    parser.add_argument("--seed", default=42, type=int, help="Random seed")
-    parser.add_argument("--batch-size", default=64, type=int)
-    parser.add_argument("--num-workers", default=4, type=int)
-    parser.add_argument("--alpha", default=0.99, type=float, help="Sparsity coefficient for elastic net.")
-    parser.add_argument("--lam", default=1e-5, type=float, help="Regularization strength.")
-    return parser.parse_args()
-
-
+@torch.no_grad()
 def evaluate_backbone(model, train_loader, test_loader, device):
     train_predictions, train_labels = [], []
     test_predictions, test_labels = [], []
 
-    with torch.no_grad():  # Disable gradient computation
-        # Evaluate on train data
-        for batch in train_loader:
-            batch_X, batch_Y = batch
-            batch_X = batch_X.to(device)
-            outputs = model(batch_X)
-            train_predictions.extend(outputs.cpu().numpy())
-            train_labels.extend(batch_Y.numpy())
+    # Evaluate on train data
+    for batch in train_loader:
+        batch_X, batch_Y = batch
+        batch_X = batch_X.to(device)
+        outputs = model(batch_X)
+        train_predictions.extend(outputs.cpu().numpy())
+        train_labels.extend(batch_Y.numpy())
 
-        # Evaluate on test data
-        for batch in test_loader:
-            batch_X, batch_Y = batch
-            batch_X = batch_X.to(device)
-            outputs = model(batch_X)
-            test_predictions.extend(outputs.cpu().numpy())
-            test_labels.extend(batch_Y.numpy())
+    # Evaluate on test data
+    for batch in test_loader:
+        batch_X, batch_Y = batch
+        batch_X = batch_X.to(device)
+        outputs = model(batch_X)
+        test_predictions.extend(outputs.cpu().numpy())
+        test_labels.extend(batch_Y.numpy())
 
     # Convert to numpy arrays
     train_predictions = np.array(train_predictions)
@@ -194,12 +178,3 @@ def get_pcbm(**kwargs):
     print(run_info_pcbm)
 
     return run_info_pcbm, run_info_baseline
-
-
-def main():
-    args = config()
-    get_pcbm(baseline=args.baseline, concept_bank=args.concept_bank, out_dir=args.out_dir, dataset=args.dataset, backbone_name=args.backbone_name, device=args.device, 
-             seed=args.seed, batch_size=args.batch_size, num_workers=args.num_workers, alpha=args.alpha, lam=args.lam)
-
-if __name__ == "__main__":
-    main()
