@@ -62,13 +62,13 @@ def load_or_compute_projections(backbone, posthoc_layer, train_loader, test_load
     train_lbls_file = f"train-lbls_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}_lbls.npy"
     test_lbls_file = f"test-lbls_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}_lbls.npy"
     
-
-    train_file = os.path.join(kwargs['out_dir'], train_file)
-    test_file = os.path.join(kwargs['out_dir'], test_file)
-    train_proj_file = os.path.join(kwargs['out_dir'], train_proj_file)
-    test_proj_file = os.path.join(kwargs['out_dir'], test_proj_file)
-    train_lbls_file = os.path.join(kwargs['out_dir'], train_lbls_file)
-    test_lbls_file = os.path.join(kwargs['out_dir'], test_lbls_file)
+    out_dir = kwargs['out_dir'].split("/")[0]
+    train_file = os.path.join(out_dir, train_file)
+    test_file = os.path.join(out_dir, test_file)
+    train_proj_file = os.path.join(out_dir, train_proj_file)
+    test_proj_file = os.path.join(out_dir, test_proj_file)
+    train_lbls_file = os.path.join(out_dir, train_lbls_file)
+    test_lbls_file = os.path.join(out_dir, test_lbls_file)
 
     if os.path.exists(train_proj_file):
         train_embs = np.load(train_file)

@@ -17,6 +17,9 @@ def get_concepts_dataset(**kwargs):
     backbone, preprocess = get_model(**kwargs)
     backbone = backbone.to(kwargs['device'])
     backbone = backbone.eval()
+
+    best_c = None
+    best_test_acc = 0.0
     
     concept_libs = {C: {} for C in kwargs['C']}
     # Get the positive and negative loaders for each concept. 
@@ -36,11 +39,15 @@ def get_concepts_dataset(**kwargs):
             concept_libs[C][concept_name] = cav_info[C]
             print(concept_name, C, cav_info[C][1], cav_info[C][2])
 
+            if cav_info[C][2] > best_test_acc:
+                best_test_acc = cav_info[C][2]
+                best_c = C
+
     # Save CAV results    
-    for C in concept_libs.keys():
+    if best_c is not None:
         lib_path = os.path.join(kwargs['out_dir'], f"{kwargs['dataset_name']}_{kwargs['backbone_name']}_{kwargs['seed']}_{n_samples}.pkl")
         with open(lib_path, "wb") as f:
-            pickle.dump(concept_libs[C], f)
+            pickle.dump(concept_libs[best_c], f)
         print(f"Saved to: {lib_path}")        
     
         total_concepts = len(concept_libs[C].keys())

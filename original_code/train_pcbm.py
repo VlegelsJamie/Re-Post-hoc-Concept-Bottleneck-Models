@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import train_test_split
 
 
 from .data import get_dataset
@@ -22,7 +23,7 @@ def evaluate_backbone(model, train_loader, test_loader, device):
     for batch in train_loader:
         batch_X, batch_Y = batch
         batch_X = batch_X.to(device)
-        outputs = model(batch_X)
+        outputs = model(batch_X).float()
         train_predictions.extend(outputs.cpu().numpy())
         train_labels.extend(batch_Y.numpy())
 
@@ -30,7 +31,7 @@ def evaluate_backbone(model, train_loader, test_loader, device):
     for batch in test_loader:
         batch_X, batch_Y = batch
         batch_X = batch_X.to(device)
-        outputs = model(batch_X)
+        outputs = model(batch_X).float()
         test_predictions.extend(outputs.cpu().numpy())
         test_labels.extend(batch_Y.numpy())
 
@@ -52,11 +53,12 @@ def evaluate_backbone(model, train_loader, test_loader, device):
         cls_acc["train"][lbl] = np.mean((train_labels[train_lbl_mask] == np.argmax(train_predictions[train_lbl_mask], axis=1)).astype(float))
         cls_acc["test"][lbl] = np.mean((test_labels[test_lbl_mask] == np.argmax(test_predictions[test_lbl_mask], axis=1)).astype(float))
 
-    # Compute AUC for binary tasks
     run_info = {"train_acc": train_accuracy, "test_acc": test_accuracy, "cls_acc": cls_acc}
-    if test_labels.max() == 1:
-        run_info["test_auc"] = roc_auc_score(test_labels, train_predictions[:, 1])
-        run_info["train_auc"] = roc_auc_score(train_labels, test_predictions[:, 1])
+
+    # Compute AUC for binary tasks
+    if np.unique(test_labels).size == 2:
+        run_info["train_acc"] = roc_auc_score(train_labels, train_predictions[:, 1])
+        run_info["test_acc"] = roc_auc_score(test_labels, test_predictions[:, 1])
 
     return run_info
 
@@ -94,8 +96,8 @@ def run_linear_probe(train_data, test_data, norm, **kwargs):
 
     # If it's a binary task, we compute auc
     if test_labels.max() == 1:
-        run_info["test_auc"] = roc_auc_score(test_labels, classifier.decision_function(test_features))
-        run_info["train_auc"] = roc_auc_score(train_labels, classifier.decision_function(train_features))
+        run_info["test_acc"] = roc_auc_score(test_labels, classifier.decision_function(test_features))
+        run_info["train_acc"] = roc_auc_score(train_labels, classifier.decision_function(train_features))
     return run_info, classifier
 
 
@@ -108,9 +110,10 @@ def get_pcbm(**kwargs):
 
     # Get the backbone from the model zoo.
     if kwargs['baseline']:
-        model, backbone, preprocess = get_model(**kwargs)
-        model = model.to(kwargs['device'])
-        model.eval()
+        model, backbone, preprocess = get_model(full_model=True, **kwargs)
+        if model is not None:
+            model = model.to(kwargs['device'])
+            model.eval()
     else:
         backbone, preprocess = get_model(**kwargs)
     backbone = backbone.to(kwargs['device'])
@@ -124,7 +127,6 @@ def get_pcbm(**kwargs):
     # See `learn_concepts_dataset.py` for details.
     conceptbank_source = kwargs['concept_bank'].split("/")[-1].split("_")[0] 
     num_classes = len(classes)
-    norm = num_concepts * num_classes
     
     # Initialize the PCBM module.
     posthoc_layer = PosthocLinearCBM(concept_bank, backbone_name=kwargs['backbone_name'], idx_to_class=idx_to_class, n_classes=num_classes)
@@ -133,25 +135,53 @@ def get_pcbm(**kwargs):
     # We compute the projections and save to the output directory. This is to save time in tuning hparams / analyzing projections.
     train_embs, train_projs, train_lbls, test_embs, test_projs, test_lbls = load_or_compute_projections(backbone, posthoc_layer, train_loader, test_loader, **kwargs)
 
+    if kwargs['validation']:
+        os.makedirs(kwargs['validation'], exist_ok=True)
+        norm = num_classes
+        train_embs, test_embs, train_projs, test_projs, train_lbls, test_lbls = train_test_split(
+            train_embs, train_projs, train_lbls, test_size=0.2, random_state=kwargs['seed'])
+        
+        if kwargs['baseline']:
+            model_path_baseline = os.path.join(kwargs['validation'],
+                                    f"validation_baseline_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.ckpt")
+            run_info_file_baseline = os.path.join(kwargs['validation'],
+                                f"run_info-validation_baseline_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.pkl")
+        
+        model_path = os.path.join(kwargs['validation'],
+                                f"validation_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.ckpt")
+        run_info_file = os.path.join(kwargs['validation'],
+                              f"run_info-validation_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.pkl")
+    else:
+        norm = num_concepts * num_classes
+
+        if kwargs['baseline']:
+            model_path_baseline = os.path.join(kwargs['baseline'],
+                                    f"baseline_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.ckpt")
+            run_info_file_baseline = os.path.join(kwargs['baseline'],
+                                f"run_info-baseline_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.pkl")
+        
+        model_path = os.path.join(kwargs['out_dir'],
+                              f"pcbm_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.ckpt")
+        run_info_file = os.path.join(kwargs['out_dir'],
+                              f"run_info-pcbm_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.pkl")
+
     # Compute baseline by training a linear probe on the embeddings of backbone model.
     if kwargs['baseline']:
+        os.makedirs(kwargs['baseline'], exist_ok=True)
+
         if kwargs["backbone_name"] == "resnet18_cub" or kwargs["backbone_name"] == "ham10000_inception":
             run_info_baseline = evaluate_backbone(model, train_loader, test_loader, kwargs['device'])
         else:
             run_info_baseline, classifier_baseline = run_linear_probe((train_embs, train_lbls), (test_embs, test_lbls), norm, **kwargs)
 
-            # Save the baseline model.
-            model_baseline_path = os.path.join('baselines/',
-                                f"baseline_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.ckpt")
-            with open(model_baseline_path, "wb") as f:
+            with open(model_path_baseline, "wb") as f:
                 pickle.dump(classifier_baseline, f)
 
-        run_info_file_baseline = os.path.join('baselines/',
-                              f"run_info-baseline_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.pkl")
+            print(f"Baseline model saved to : {model_path_baseline}")
+
         with open(run_info_file_baseline, "wb") as f:
             pickle.dump(run_info_baseline, f)
 
-        print(f"Baseline model saved to : {model_baseline_path}")
         print(run_info_baseline)
     
     run_info_pcbm, classifier_pcbm = run_linear_probe((train_projs, train_lbls), (test_projs, test_lbls), norm, **kwargs)
@@ -159,14 +189,7 @@ def get_pcbm(**kwargs):
     # Convert from the SGDClassifier module to PCBM module.
     posthoc_layer.set_weights(weights=classifier_pcbm.coef_, bias=classifier_pcbm.intercept_)
 
-    # Sorry for the model path hack. Probably i'll change this later.
-    model_pcbm_path = os.path.join(kwargs['out_dir'],
-                              f"pcbm_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.ckpt")
-    torch.save(posthoc_layer, model_pcbm_path)
-
-    # Again, a sad hack.. Open to suggestions
-    run_info_file = os.path.join(kwargs['out_dir'],
-                              f"run_info-pcbm_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.pkl")
+    torch.save(posthoc_layer, model_path)
     with open(run_info_file, "wb") as f:
         pickle.dump(run_info_pcbm, f)
 
@@ -174,7 +197,10 @@ def get_pcbm(**kwargs):
         # Prints the Top-5 Concept Weigths for each class.
         print(posthoc_layer.analyze_classifier(k=5))
 
-    print(f"Model saved to : {model_pcbm_path}")
+    print(f"Model saved to : {model_path}")
     print(run_info_pcbm)
 
-    return run_info_pcbm, run_info_baseline
+    if kwargs['baseline']:
+        return run_info_pcbm, run_info_baseline
+    else:
+        return run_info_pcbm
