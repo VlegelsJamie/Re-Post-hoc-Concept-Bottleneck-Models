@@ -36,7 +36,7 @@ val_accs = {n_samples: {dataset: {"baseline": [], "pcbm": {lam: [] for lam in LA
 
 for n_samples in N_SAMPLES:
     for dataset, config in DATASETS.items():
-        concept_bank_path = os.join.path(CONCEPT_BANK_DIR, f"{config['concept']}_{config['backbone']}_{SEED}_{n_samples}.pkl")
+        concept_bank_path = os.path.join(CONCEPT_BANK_DIR, f"{config['concept']}_{config['backbone']}_{SEED}_{n_samples}.pkl")
 
         # Check if the concept bank file already exists
         if not os.path.exists(concept_bank_path):
@@ -53,7 +53,7 @@ for n_samples in N_SAMPLES:
             )
 
         for lam_value in LAM_SEARCH_VALUES:
-            model_path = os.join.path(PCBM_MODELS_DIR, f"pcbm_{dataset}__{config['backbone']}__{config['concept']}__lam-{lam_value}__alpha-{ALPHA}__seed-{SEED}.ckpt")
+            model_path = os.path.join(PCBM_MODELS_DIR, f"pcbm_{dataset}__{config['backbone']}__{config['concept']}__lam-{lam_value}__alpha-{ALPHA}__seed-{SEED}.ckpt")
 
             run_info_pcbm, run_info_baseline = get_pcbm(
                 baseline=BASELINE_DIR, 
