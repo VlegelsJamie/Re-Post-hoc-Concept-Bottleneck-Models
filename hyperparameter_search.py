@@ -2,7 +2,7 @@ import random
 import json
 import os
 
-from original_code import get_concepts_dataset, get_pcbm
+from pcbm import get_concepts_dataset, get_pcbm
 
 # Constants
 DEVICE = "cuda"
