@@ -23,11 +23,11 @@ SEED = 42
 
 # Datasets and their configurations
 DATASETS = {
-    "cifar10": {"backbone": "clip-RN50", "concept": "broden"},
-    # "cifar100": {"backbone": "clip-RN50", "concept": "broden"},
+    # "cifar10": {"backbone": "clip-RN50", "concept": "broden"},
+    "cifar100": {"backbone": "clip-RN50", "concept": "broden"},
     # "coco-stuff": {"backbone": "clip-RN50", "concept": "broden"},
-    # "cub": {"backbone": "resnet18_cub", "concept": "cub"},
-    # "ham10000": {"backbone": "ham10000_inception", "concept": "derm7pt"},
+    "cub": {"backbone": "resnet18_cub", "concept": "cub"},
+    "ham10000": {"backbone": "ham10000_inception", "concept": "derm7pt"},
     # "siim-isic": {"backbone": "ham10000_inception", "concept": "derm7pt"},
 }
 

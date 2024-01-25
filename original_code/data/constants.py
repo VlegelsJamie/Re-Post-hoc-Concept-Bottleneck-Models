@@ -25,6 +25,12 @@ HAM10K_DATA_DIR = "datasets/ham10k_dataset/"
 
 
 # COCO-Stuff dataset
+COCO_DATA_DIR = "datasets/coco_dataset/"
 
 
 # SIIM-ISIC dataset
+ISIC_DATA_DIR = "datasets/isic_dataset/"
+
+
+# Metashift dataset
+METASHIFT_DATA_DIR = "datasets/metashift_dataset/"

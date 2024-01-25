@@ -60,6 +60,25 @@ def get_dataset(preprocess=None, **kwargs):
         class_to_idx = {v:k for k,v in idx_to_class.items()}
         classes = list(class_to_idx.keys())
 
+    elif kwargs['dataset'] == "coco":
+        from .coco import load_coco_data
+        train_loader, test_loader, idx_to_class = load_coco_data(preprocess, **kwargs)
+        class_to_idx = {v:k for k,v in idx_to_class.items()}
+        classes = list(class_to_idx.keys())
+
+    elif kwargs['dataset'] == "isic":
+        from .isic import load_isic_data
+        train_loader, test_loader, idx_to_class = load_isic_data(preprocess, **kwargs)
+        class_to_idx = {v:k for k,v in idx_to_class.items()}
+        classes = list(class_to_idx.keys())
+
+    elif kwargs['dataset'] == "metashift_1":
+        from .metashift import load_metashift_data
+        task = kwargs['dataset'].split("_")[1]
+        train_loader, test_loader, idx_to_class, classes = load_metashift_data(preprocess, task, **kwargs)
+        class_to_idx = {v:k for k,v in idx_to_class.items()}
+        classes = list(class_to_idx.keys())
+
     else:
         raise ValueError(kwargs['dataset'])
 

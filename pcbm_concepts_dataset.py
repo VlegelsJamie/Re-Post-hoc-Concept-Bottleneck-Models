@@ -17,7 +17,7 @@ NUM_SEEDS = 1
 C_VALUES = [0.001, 0.01, 0.1, 1.0, 10.0]
 N_SAMPLES = 50
 ALPHA = 0.99
-LAM_VALUES = {"cifar10": 2.0, "cifar100": 2.0, "cub": 0.01, "ham10000": 2.0}
+LAM_VALUES = {"cifar10": 2.0, "cifar100": 2.0, "cub": 0.01, "ham10000": 2.0, "isic": 0.001}
 
 # Datasets and their configurations
 DATASETS = {
@@ -25,8 +25,8 @@ DATASETS = {
     # "cifar100": {"backbone": "clip-RN50", "concept": "broden"},
     # "coco-stuff": {"backbone": "clip-RN50", "concept": "broden"},
     # "cub": {"backbone": "resnet18_cub", "concept": "cub"},
-    "ham10000": {"backbone": "ham10000_inception", "concept": "derm7pt"},
-    # "siim-isic": {"backbone": "ham10000_inception", "concept": "derm7pt"},
+    # "ham10000": {"backbone": "ham10000_inception", "concept": "derm7pt"},
+    "isic": {"backbone": "ham10000_inception", "concept": "derm7pt"},
 }
 
 # Initialize test accuracy dictionaries

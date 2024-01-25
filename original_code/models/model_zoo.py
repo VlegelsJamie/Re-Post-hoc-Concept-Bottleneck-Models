@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from torchvision import transforms
+from torchvision import models, transforms
 
 
 class ResNetBottom(nn.Module):
@@ -29,7 +29,7 @@ class ResNetTop(nn.Module):
 def get_model(backbone_name="resnet18_cub", full_model=False, **kwargs):
     if "clip" in backbone_name:
         import clip
-        # We assume clip models are passed of the form - clip:RN50
+        # We assume clip models are passed of the form - clip-RN50
         clip_backbone_name = backbone_name.split("-")[1]
         backbone, preprocess = clip.load(clip_backbone_name, device=kwargs['device'], download_root=kwargs['out_dir'])
         backbone = backbone.eval()
@@ -56,6 +56,24 @@ def get_model(backbone_name="resnet18_cub", full_model=False, **kwargs):
                         transforms.ToTensor(),
                         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                       ])
+    
+    elif backbone_name == "resnet50":
+        # Load the pretrained ResNet50 model
+        model = models.resnet50(pretrained=True)
+
+        # Copy the model to create the backbone
+        backbone = models.resnet50(pretrained=True)
+        # Remove the last fully connected layer to get the backbone
+        backbone = torch.nn.Sequential(*(list(backbone.children())[:-1]))
+
+        # Preprocessing steps
+        preprocess = transforms.Compose([
+            transforms.Resize(299),
+            transforms.CenterCrop(299),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+
     else:
         raise ValueError(backbone_name)
 
