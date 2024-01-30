@@ -71,7 +71,7 @@ def get_concept_data(all_classes):
     return all_concepts
 
 
-def clean_concepts(scenario_concepts):
+def clean_concepts(scenario_concepts, out_dir):
     """
     Clean the plurals, trailing whitespaces etc.
     """
@@ -79,8 +79,9 @@ def clean_concepts(scenario_concepts):
     import nltk
 
     # We use nltk to handle plurals, multiples of the same words etc.
-    nltk.download("wordnet")
-    nltk.download("omw-1.4")
+    nltk.data.path.append(out_dir)
+    nltk.download("wordnet", download_dir=out_dir)
+    nltk.download("omw-1.4", download_dir=out_dir)
     Lem = WordNetLemmatizer()
 
     scenario_concepts_rec = []
@@ -112,7 +113,7 @@ def learn_conceptbank(model, concept_list, scenario, **kwargs):
     concept_dict = {}
     for concept in tqdm(concept_list):
         # Note: You can try other forms of prompting, e.g. "photo of {concept}" etc. here.
-        text = clip.tokenize(f"{concept}").to("cuda")
+        text = clip.tokenize(f"{concept}").to(kwargs['device'])
         text_features = model.encode_text(text).cpu().numpy()
         text_features = text_features/np.linalg.norm(text_features)
         # store concept vectors in a dictionary. Adding the additional terms to be consistent with the
@@ -138,7 +139,7 @@ def get_concepts_multimodal(**kwargs):
         # Get the names of all concepts.
         all_concepts = get_concept_data(all_classes)
         # Clean the concepts for uniques, plurals etc. 
-        all_concepts = clean_concepts(all_concepts)     
+        all_concepts = clean_concepts(all_concepts, kwargs['out_dir'].split("/")[0])     
         all_concepts = list(set(all_concepts).difference(set(all_classes)))
         # If we'd like to recurse in the conceptnet graph, specify `recurse > 1`.
         for i in range(1, kwargs['recurse']):

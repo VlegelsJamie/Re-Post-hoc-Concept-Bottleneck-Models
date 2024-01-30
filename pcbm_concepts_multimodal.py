@@ -1,6 +1,7 @@
 import random
 import json
 import os
+import numpy as np
 
 from pcbm import get_concepts_multimodal, get_pcbm, get_pcbm_h
 
@@ -9,13 +10,13 @@ from pcbm import get_concepts_multimodal, get_pcbm, get_pcbm_h
 DEVICE = "cuda"
 NUM_WORKERS = 4
 BATCH_SIZE = 64
-CONCEPT_BANK_DIR = "concept_banks/experiment_multimodal/"
-PCBM_MODELS_DIR = "pcbm_models/experiment_multimodal/"
-PCBM_H_MODELS_DIR = "pcbm_h_models/experiment_multimodal/"
-NUM_SEEDS = 1
+CONCEPT_BANK_DIR = "trained_models/concept_banks/experiment_multimodal/"
+PCBM_MODELS_DIR = "trained_models/pcbm_models/experiment_multimodal/"
+PCBM_H_MODELS_DIR = "trained_models/pcbm_h_models/experiment_multimodal/"
+NUM_SEEDS = 10
 ALPHA = 0.99
-LAM_VALUES = {"cifar10": 2, "cifar100": 2, "coco-stuff": 0.001}
-DATASETS = ["cifar10", "cifar100"]
+LAM_VALUES = {"cifar10": 2, "cifar100": 2, "coco": 0.001}
+DATASETS = ["cifar10", "cifar100", "coco"]
 
 # Initialize test accuracy dictionaries
 test_accs = {dataset: {"pcbm": [], "pcbm-h": []} for dataset in DATASETS}
@@ -64,6 +65,21 @@ for seed in random_seeds:
             l2_penalty=LAM_VALUES[dataset]
             )
         test_accs[dataset]["pcbm-h"].append(run_info_pcbm_h["test_acc"])
+
+# Calculate summary statistics
+summary_stats = {dataset: {} for dataset in DATASETS}
+for dataset in DATASETS:
+    for model_type in ['pcbm', 'pcbm-h']:
+        if test_accs[dataset][model_type]: 
+            mean_acc = np.mean(test_accs[dataset][model_type])
+            std_dev_acc = np.std(test_accs[dataset][model_type])
+            summary_stats[dataset][model_type] = {'mean': mean_acc, 'std_dev': std_dev_acc}
+        else:
+            summary_stats[dataset][model_type] = {'mean': None, 'std_dev': None}
+
+# Add summary statistics to test_accs dictionary
+for dataset in DATASETS:
+    test_accs[dataset]['summary'] = summary_stats[dataset]
 
 os.makedirs("results/", exist_ok=True)
 with open("results/test_accuracy_results_multimodal_reproduction.json", 'w') as file:

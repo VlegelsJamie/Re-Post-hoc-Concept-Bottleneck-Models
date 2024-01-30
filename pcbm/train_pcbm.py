@@ -4,8 +4,9 @@ import pickle
 import numpy as np
 import torch
 from sklearn.linear_model import SGDClassifier
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, average_precision_score
 from sklearn.model_selection import train_test_split
+from sklearn.multioutput import MultiOutputClassifier
 
 
 from .data import get_dataset
@@ -63,7 +64,7 @@ def evaluate_backbone(model, train_loader, test_loader, device):
     return run_info
 
 
-def run_linear_probe(train_data, test_data, norm, **kwargs):
+def run_linear_probe(train_data, test_data, lam_norm, **kwargs):
     train_features, train_labels = train_data
     test_features, test_labels = test_data
     
@@ -71,7 +72,7 @@ def run_linear_probe(train_data, test_data, norm, **kwargs):
     # It's fine to use other modules here, this seemed like the most pedagogical option.
     # We experimented with torch modules etc., and results are mostly parallel.
     classifier = SGDClassifier(random_state=kwargs['seed'], loss="log_loss",
-                               alpha=kwargs['lam'] / norm, l1_ratio=kwargs['alpha'], verbose=0,
+                               alpha=lam_norm, l1_ratio=kwargs['alpha'], verbose=0,
                                penalty="elasticnet", max_iter=5000)
     classifier.fit(train_features, train_labels)
 
@@ -101,6 +102,29 @@ def run_linear_probe(train_data, test_data, norm, **kwargs):
     return run_info, classifier
 
 
+def run_linear_probe_binary(train_data, test_data, lam, **kwargs):
+    train_features, train_labels = train_data
+    test_features, test_labels = test_data
+    
+    # Use MultiOutputClassifier for multi-label tasks with SGDClassifier
+    classifier = MultiOutputClassifier(SGDClassifier(random_state=kwargs['seed'], loss="log_loss",
+                                                     alpha=lam, l1_ratio=kwargs['alpha'], verbose=0,
+                                                     penalty="elasticnet", max_iter=5000))
+    classifier.fit(train_features, train_labels)
+
+    # Predict probabilities for computing mAP
+    train_probabilities = classifier.predict_proba(train_features)
+    test_probabilities = classifier.predict_proba(test_features)
+
+    # Compute mean average precision (mAP)
+    train_mAP = np.mean([average_precision_score(train_labels[:, i], train_probabilities[i][:, 1]) for i in range(train_labels.shape[1])])
+    test_mAP = np.mean([average_precision_score(test_labels[:, i], test_probabilities[i][:, 1]) for i in range(test_labels.shape[1])])
+
+    run_info = {"train_mAP": train_mAP, "test_mAP": test_mAP}
+    
+    return run_info, classifier
+
+
 def get_pcbm(**kwargs):
     all_concepts = pickle.load(open(kwargs['concept_bank'], 'rb'))
     all_concept_names = list(all_concepts.keys())
@@ -127,6 +151,7 @@ def get_pcbm(**kwargs):
     # See `learn_concepts_dataset.py` for details.
     conceptbank_source = kwargs['concept_bank'].split("/")[-1].split("_")[0] 
     num_classes = len(classes)
+    norm = num_concepts * num_classes
     
     # Initialize the PCBM module.
     posthoc_layer = PosthocLinearCBM(concept_bank, backbone_name=kwargs['backbone_name'], idx_to_class=idx_to_class, n_classes=num_classes)
@@ -137,7 +162,6 @@ def get_pcbm(**kwargs):
 
     if kwargs['validation']:
         os.makedirs(kwargs['validation'], exist_ok=True)
-        norm = num_classes
         train_embs, test_embs, train_projs, test_projs, train_lbls, test_lbls = train_test_split(
             train_embs, train_projs, train_lbls, test_size=0.2, random_state=kwargs['seed'])
         
@@ -152,8 +176,6 @@ def get_pcbm(**kwargs):
         run_info_file = os.path.join(kwargs['validation'],
                               f"run_info-validation_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.pkl")
     else:
-        norm = num_concepts * num_classes
-
         if kwargs['baseline']:
             model_path_baseline = os.path.join(kwargs['baseline'],
                                     f"baseline_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.ckpt")
@@ -172,7 +194,12 @@ def get_pcbm(**kwargs):
         if kwargs["backbone_name"] == "resnet18_cub" or kwargs["backbone_name"] == "ham10000_inception":
             run_info_baseline = evaluate_backbone(model, train_loader, test_loader, kwargs['device'])
         else:
-            run_info_baseline, classifier_baseline = run_linear_probe((train_embs, train_lbls), (test_embs, test_lbls), norm, **kwargs)
+            lam_norm = kwargs["lam_baseline"] / num_classes
+
+            if kwargs['dataset'] == "coco":
+                run_info_baseline, classifier_baseline = run_linear_probe_binary((train_embs, train_lbls), (test_embs, test_lbls), lam_norm, **kwargs)
+            else:
+                run_info_baseline, classifier_baseline = run_linear_probe((train_embs, train_lbls), (test_embs, test_lbls), lam_norm, **kwargs)
 
             with open(model_path_baseline, "wb") as f:
                 pickle.dump(classifier_baseline, f)
@@ -184,7 +211,11 @@ def get_pcbm(**kwargs):
 
         print(run_info_baseline)
     
-    run_info_pcbm, classifier_pcbm = run_linear_probe((train_projs, train_lbls), (test_projs, test_lbls), norm, **kwargs)
+    lam_norm = kwargs["lam"] / norm
+    if kwargs['dataset'] == "coco":
+        run_info_pcbm, classifier_pcbm = run_linear_probe_binary((train_projs, train_lbls), (test_projs, test_lbls), lam_norm, **kwargs)
+    else:
+        run_info_pcbm, classifier_pcbm = run_linear_probe((train_projs, train_lbls), (test_projs, test_lbls), lam_norm, **kwargs)
     
     # Convert from the SGDClassifier module to PCBM module.
     posthoc_layer.set_weights(weights=classifier_pcbm.coef_, bias=classifier_pcbm.intercept_)

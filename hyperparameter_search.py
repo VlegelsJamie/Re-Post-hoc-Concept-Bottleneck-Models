@@ -8,31 +8,32 @@ from pcbm import get_concepts_dataset, get_pcbm
 DEVICE = "cuda"
 NUM_WORKERS = 4
 BATCH_SIZE = 64
-CONCEPT_BANK_DIR = "concept_banks/experiment_conceptdataset/"
-BASELINE_DIR = "baseline_models/experiment_conceptdataset/"
-PCBM_MODELS_DIR = "pcbm_models/experiment_conceptdataset/"
-PCBM_H_MODELS_DIR = "pcbm_h_models/experiment_conceptdataset/"
-VALIDATION_DIR = "validation_models/experiment_conceptdataset/"
+CONCEPT_BANK_DIR = "trained_models/concept_banks/experiment_conceptdataset/"
+BASELINE_DIR = "trained_models/baseline_models/experiment_conceptdataset/"
+PCBM_MODELS_DIR = "trained_models/pcbm_models/experiment_conceptdataset/"
+PCBM_H_MODELS_DIR = "trained_models/pcbm_h_models/experiment_conceptdataset/"
+VALIDATION_DIR = "trained_models/validation_models/experiment_conceptdataset/"
 C_VALUES = [0.001, 0.01, 0.1, 1.0, 10.0]
 N_SAMPLES = [20, 50, 100]
 ALPHA = 0.99
-LAM_SEARCH_VALUES = [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0]
+LAM_SEARCH_VALUES_PCBM = [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0]
+LAM_SEARCH_VALUES_BASELINE = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]
 
 # Fixed seed
 SEED = 42
 
 # Datasets and their configurations
 DATASETS = {
-    # "cifar10": {"backbone": "clip-RN50", "concept": "broden"},
+    "cifar10": {"backbone": "clip-RN50", "concept": "broden"},
     "cifar100": {"backbone": "clip-RN50", "concept": "broden"},
-    # "coco-stuff": {"backbone": "clip-RN50", "concept": "broden"},
+    "coco-stuff": {"backbone": "clip-RN50", "concept": "broden"},
     "cub": {"backbone": "resnet18_cub", "concept": "cub"},
     "ham10000": {"backbone": "ham10000_inception", "concept": "derm7pt"},
-    # "siim-isic": {"backbone": "ham10000_inception", "concept": "derm7pt"},
+    "siim-isic": {"backbone": "ham10000_inception", "concept": "derm7pt"},
 }
 
 # Initialize test accuracy dictionaries
-val_accs = {n_samples: {dataset: {"baseline": [], "pcbm": {lam: [] for lam in LAM_SEARCH_VALUES}, "pcbm-h": []} for dataset in DATASETS} for n_samples in N_SAMPLES}
+val_accs = {n_samples: {dataset: {"baseline": {lam: [] for lam in LAM_SEARCH_VALUES_BASELINE}, "pcbm": {lam: [] for lam in LAM_SEARCH_VALUES_PCBM}} for dataset in DATASETS} for n_samples in N_SAMPLES}
 
 for n_samples in N_SAMPLES:
     for dataset, config in DATASETS.items():
@@ -52,9 +53,7 @@ for n_samples in N_SAMPLES:
                 n_samples=n_samples
             )
 
-        for lam_value in LAM_SEARCH_VALUES:
-            model_path = os.path.join(PCBM_MODELS_DIR, f"pcbm_{dataset}__{config['backbone']}__{config['concept']}__lam-{lam_value}__alpha-{ALPHA}__seed-{SEED}.ckpt")
-
+        for lam_value_pcbm, lam_value_baseline in zip(LAM_SEARCH_VALUES_PCBM, LAM_SEARCH_VALUES_BASELINE):
             run_info_pcbm, run_info_baseline = get_pcbm(
                 baseline=BASELINE_DIR, 
                 validation=VALIDATION_DIR,
@@ -67,10 +66,11 @@ for n_samples in N_SAMPLES:
                 batch_size=BATCH_SIZE, 
                 num_workers=NUM_WORKERS, 
                 alpha=ALPHA, 
-                lam=lam_value
+                lam=lam_value_pcbm,
+                lam_baseline=lam_value_baseline
             )
-            val_accs[n_samples][dataset]["baseline"].append(run_info_baseline["test_acc"])
-            val_accs[n_samples][dataset]["pcbm"][lam_value].append(run_info_pcbm["test_acc"])
+            val_accs[n_samples][dataset]["baseline"][lam_value_baseline].append(run_info_baseline["test_acc"])
+            val_accs[n_samples][dataset]["pcbm"][lam_value_pcbm].append(run_info_pcbm["test_acc"])
 
 os.makedirs("results/", exist_ok=True)
 with open("results/hyperparameter_search.json", 'w') as file:

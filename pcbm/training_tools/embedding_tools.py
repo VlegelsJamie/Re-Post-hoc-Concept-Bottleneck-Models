@@ -52,7 +52,7 @@ class EmbDataset(Dataset):
 def load_or_compute_projections(backbone, posthoc_layer, train_loader, test_loader, **kwargs):
     # Get a clean conceptbank string
     # e.g. if the path is /../../cub_resnet-cub_0.1_100.pkl, then the conceptbank string is resnet-cub_0.1_100
-    conceptbank_source = kwargs['concept_bank'].split("/")[-1].split(".")[0] 
+    conceptbank_source = kwargs['concept_bank'].split("/")[-1].split("_")[0] 
     
     # To make it easier to analyize results/rerun with different params, we'll extract the embeddings and save them
     train_file = f"train-embs_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}.npy"

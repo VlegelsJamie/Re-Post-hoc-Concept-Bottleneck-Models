@@ -6,6 +6,7 @@ import torch
 import numpy as np
 from sklearn.model_selection import train_test_split
 from PIL import Image
+
 from .constants import ISIC_DATA_DIR
 
 
@@ -29,7 +30,7 @@ def load_isic_data(preprocess, **kwargs):
     np.random.seed(kwargs['seed'])
 
     df = pd.read_csv(os.path.join(ISIC_DATA_DIR, 'isic_metadata.csv'))
-    all_image_paths = glob(os.path.join(ISIC_DATA_DIR, '*', '*.jpg'))
+    all_image_paths = glob(os.path.join(ISIC_DATA_DIR, '*.jpg'))
     id_to_path = {os.path.splitext(os.path.basename(x))[0]: x for x in all_image_paths}
 
     def path_getter(id):
@@ -38,7 +39,7 @@ def load_isic_data(preprocess, **kwargs):
         else:
             return "-1"
         
-    df['path'] = df['image_id'].map(path_getter)
+    df['path'] = df['image_name'].map(path_getter)
     df = df[df.path != "-1"] 
 
     class_to_idx = {"benign": 0, "malignant": 1}

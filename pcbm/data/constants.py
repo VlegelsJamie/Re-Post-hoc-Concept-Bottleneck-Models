@@ -26,6 +26,10 @@ HAM10K_DATA_DIR = "datasets/ham10k_dataset/"
 
 # COCO-Stuff dataset
 COCO_DATA_DIR = "datasets/coco_dataset/"
+COCO_IMAGES = os.path.join(COCO_DATA_DIR, "images")
+COCO_META = os.path.join(COCO_DATA_DIR, "meta.json")
+COCO_LABELS = os.path.join(COCO_DATA_DIR, "labels.txt")
+COCO_ANNOTATIONS = os.path.join(COCO_DATA_DIR, "annotations")
 
 
 # SIIM-ISIC dataset
