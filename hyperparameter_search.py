@@ -14,10 +14,10 @@ PCBM_MODELS_DIR = "trained_models/pcbm_models/experiment_conceptdataset/"
 PCBM_H_MODELS_DIR = "trained_models/pcbm_h_models/experiment_conceptdataset/"
 VALIDATION_DIR = "trained_models/validation_models/experiment_conceptdataset/"
 C_VALUES = [0.001, 0.01, 0.1, 1.0, 10.0]
-N_SAMPLES = [20, 50, 100]
+N_SAMPLES = [10, 25, 50]
 ALPHA = 0.99
 LAM_SEARCH_VALUES_PCBM = [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0]
-LAM_SEARCH_VALUES_BASELINE = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]
+LAM_SEARCH_VALUES_BASELINE = [1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5]
 
 # Fixed seed
 SEED = 42

@@ -107,7 +107,7 @@ def get_pcbm_h(**kwargs):
     # Train PCBM-h
     run_info = train_hybrid(train_loader, test_loader, hybrid_model, hybrid_optimizer, num_classes, **kwargs)
     
-    conceptbank_source = kwargs['concept_bank'].split("/")[-1].split(".")[0]
+    conceptbank_source = kwargs['concept_bank'].split("/")[-1].split("_")[0]
     hybrid_model_path = os.path.join(kwargs['out_dir'],
                               f"pcbm-hybrid_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}__lr-{kwargs['lr']}__l2_penalty-{kwargs['l2_penalty']}__seed-{kwargs['seed']}.ckpt")
     torch.save(hybrid_model, hybrid_model_path)

@@ -56,16 +56,18 @@ def load_metashift_data(preprocess, scenario, **kwargs):
     else:
         task = ["beach", "computer", "motorcycle", "stove", "table"]
     
+    spurious_train_class, spurious_test_class = SCENARIOS[scenario]['train'], SCENARIOS[scenario]['test']
+    
     # Load images for each class
     df_list_train = []
     df_list_val = []
     for cls in task:
         directory = os.path.join(METASHIFT_DATA_DIR, cls)
-        directory_spurious_train = os.path.join(METASHIFT_DATA_DIR, scenario['train'])
-        directory_spurious_test = os.path.join(METASHIFT_DATA_DIR, scenario['test'])
-        if cls == scenario['train'].split('(')[0]:
-            df_list_train.append(load_images_from_dir(directory_spurious_train, label=scenario['train'], n_samples=50))
-            df_list_val.append(load_images_from_dir(directory_spurious_test, label=scenario['test'], n_samples=50))
+        directory_spurious_train = os.path.join(METASHIFT_DATA_DIR, spurious_train_class)
+        directory_spurious_test = os.path.join(METASHIFT_DATA_DIR, spurious_test_class)
+        if cls == spurious_train_class.split('(')[0]:
+            df_list_train.append(load_images_from_dir(directory_spurious_train, label=spurious_train_class, n_samples=50))
+            df_list_val.append(load_images_from_dir(directory_spurious_test, label=spurious_test_class, n_samples=50))
         else:
             df_list_train.append(load_images_from_dir(directory, label=task.index(cls), n_samples=50))
             df_list_val.append(load_images_from_dir(directory, label=task.index(cls), n_samples=50))

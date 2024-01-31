@@ -45,6 +45,7 @@ def get_concepts_dataset(**kwargs):
 
     # Save CAV results    
     if best_c is not None:
+        os.makedirs(kwargs['out_dir'], exist_ok=True)
         lib_path = os.path.join(kwargs['out_dir'], f"{kwargs['dataset_name']}_{kwargs['backbone_name']}_{kwargs['seed']}_{n_samples}.pkl")
         with open(lib_path, "wb") as f:
             pickle.dump(concept_libs[best_c], f)

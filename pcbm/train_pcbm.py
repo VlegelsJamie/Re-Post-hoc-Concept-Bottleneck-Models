@@ -102,13 +102,13 @@ def run_linear_probe(train_data, test_data, lam_norm, **kwargs):
     return run_info, classifier
 
 
-def run_linear_probe_binary(train_data, test_data, lam, **kwargs):
+def run_linear_probe_binary(train_data, test_data, lam_norm, **kwargs):
     train_features, train_labels = train_data
     test_features, test_labels = test_data
     
     # Use MultiOutputClassifier for multi-label tasks with SGDClassifier
     classifier = MultiOutputClassifier(SGDClassifier(random_state=kwargs['seed'], loss="log_loss",
-                                                     alpha=lam, l1_ratio=kwargs['alpha'], verbose=0,
+                                                     alpha=lam_norm, l1_ratio=kwargs['alpha'], verbose=0,
                                                      penalty="elasticnet", max_iter=5000))
     classifier.fit(train_features, train_labels)
 

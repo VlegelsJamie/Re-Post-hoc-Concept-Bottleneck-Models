@@ -121,6 +121,7 @@ def learn_conceptbank(model, concept_list, scenario, **kwargs):
         concept_dict[concept] = (text_features, None, None, 0, {})
 
     print(f"# concepts: {len(concept_dict)}")
+    os.makedirs(kwargs['out_dir'], exist_ok=True)
     concept_dict_path = os.path.join(kwargs['out_dir'], f"multimodal_concept_{kwargs['backbone_name']}_{scenario}_recurse:{kwargs['recurse']}.pkl")
     pickle.dump(concept_dict, open(concept_dict_path, 'wb'))
     print(f"Dumped to : {concept_dict_path}")
