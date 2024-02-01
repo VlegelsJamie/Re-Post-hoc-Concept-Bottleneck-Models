@@ -82,7 +82,7 @@ if not os.path.exists(concept_bank_path):
         n_samples=N_SAMPLES
     )
 
-for scenario in range(1):
+for scenario in range(10):
     model_path = os.path.join(PCBM_MODELS_DIR, f"pcbm_{DATASET + '_' + str(scenario)}__{BACKBONE}__{CONCEPT}__lam-{LAM_VALUE}__alpha-{ALPHA}__seed-{SEED}.ckpt")
 
     run_info_pcbm = get_pcbm(

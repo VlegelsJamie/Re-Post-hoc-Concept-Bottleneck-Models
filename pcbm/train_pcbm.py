@@ -121,8 +121,25 @@ def run_linear_probe_binary(train_data, test_data, lam_norm, **kwargs):
     test_mAP = np.mean([average_precision_score(test_labels[:, i], test_probabilities[i][:, 1]) for i in range(test_labels.shape[1])])
 
     run_info = {"train_mAP": train_mAP, "test_mAP": test_mAP}
+
+    # Initialize lists to store the aggregated coefficients and intercepts
+    aggregated_coefs = []
+    aggregated_intercepts = []
+
+    for estimator in classifier.estimators_:
+        # The shape of coef_ for a single class problem is (1, n_features)
+        # We squeeze it to (n_features,) to remove the single-dimensional entry
+        aggregated_coefs.append(np.squeeze(estimator.coef_))
+        
+        # Intercepts are already in the shape (1,) for each classifier
+        # We just take the value directly
+        aggregated_intercepts.append(estimator.intercept_[0])
+
+    # Convert lists to ndarrays
+    aggregated_coefs_ndarray = np.array(aggregated_coefs)
+    aggregated_intercepts_ndarray = np.array(aggregated_intercepts)
     
-    return run_info, classifier
+    return run_info, aggregated_coefs_ndarray, aggregated_intercepts_ndarray, classifier
 
 
 def get_pcbm(**kwargs):
@@ -197,7 +214,7 @@ def get_pcbm(**kwargs):
             lam_norm = kwargs["lam_baseline"] / num_classes
 
             if kwargs['dataset'] == "coco":
-                run_info_baseline, classifier_baseline = run_linear_probe_binary((train_embs, train_lbls), (test_embs, test_lbls), lam_norm, **kwargs)
+                run_info_baseline, coefs, intercepts, classifier_baseline = run_linear_probe_binary((train_embs, train_lbls), (test_embs, test_lbls), lam_norm, **kwargs)
             else:
                 run_info_baseline, classifier_baseline = run_linear_probe((train_embs, train_lbls), (test_embs, test_lbls), lam_norm, **kwargs)
 
@@ -213,12 +230,13 @@ def get_pcbm(**kwargs):
     
     lam_norm = kwargs["lam"] / norm
     if kwargs['dataset'] == "coco":
-        run_info_pcbm, classifier_pcbm = run_linear_probe_binary((train_projs, train_lbls), (test_projs, test_lbls), lam_norm, **kwargs)
+        run_info_pcbm, coefs, intercepts, classifier_pcbm = run_linear_probe_binary((train_projs, train_lbls), (test_projs, test_lbls), lam_norm, **kwargs)
+        posthoc_layer.set_weights(weights=coefs, bias=intercepts)
     else:
         run_info_pcbm, classifier_pcbm = run_linear_probe((train_projs, train_lbls), (test_projs, test_lbls), lam_norm, **kwargs)
     
-    # Convert from the SGDClassifier module to PCBM module.
-    posthoc_layer.set_weights(weights=classifier_pcbm.coef_, bias=classifier_pcbm.intercept_)
+        # Convert from the SGDClassifier module to PCBM module.
+        posthoc_layer.set_weights(weights=classifier_pcbm.coef_, bias=classifier_pcbm.intercept_)
 
     torch.save(posthoc_layer, model_path)
     with open(run_info_file, "wb") as f:

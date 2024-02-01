@@ -146,7 +146,7 @@ def get_concepts_multimodal(**kwargs):
         for i in range(1, kwargs['recurse']):
             all_concepts = get_concept_data(all_concepts)
             all_concepts = list(set(all_concepts))
-            all_concepts = clean_concepts(all_concepts)
+            all_concepts = clean_concepts(all_concepts, kwargs['out_dir'].split("/")[0])
             all_concepts = list(set(all_concepts).difference(set(all_classes)))
         # Generate the concept bank.
         learn_conceptbank(model, all_concepts, kwargs['classes'], **kwargs)
@@ -156,13 +156,13 @@ def get_concepts_multimodal(**kwargs):
         cifar100_ds = datasets.CIFAR100(root=kwargs['out_dir'], train=True, download=True)
         all_classes = list(cifar100_ds.classes)
         all_concepts = get_concept_data(all_classes)
-        all_concepts = clean_concepts(all_concepts)
+        all_concepts = clean_concepts(all_concepts, kwargs['out_dir'].split("/")[0])
         all_concepts = list(set(all_concepts).difference(set(all_classes)))
         # If we'd like to recurse in the conceptnet graph, specify `recurse > 1`.
         for i in range(1, kwargs['recurse']):
             all_concepts = get_concept_data(all_concepts)
             all_concepts = list(set(all_concepts))
-            all_concepts = clean_concepts(all_concepts)
+            all_concepts = clean_concepts(all_concepts, kwargs['out_dir'].split("/")[0])
             all_concepts = list(set(all_concepts).difference(set(all_classes)))
         learn_conceptbank(model, all_concepts, kwargs['classes'], **kwargs)
 
