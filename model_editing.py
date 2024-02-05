@@ -116,47 +116,6 @@ for scenario in range(10):
     )
     unedited[scenario]["pcbm-h"].append(run_info_pcbm_h["test_acc"])
 
-"""
-for scenario, config in SCENARIOS.items():
-    hybrid_model_path = os.path.join(PCBM_H_MODELS_DIR, f"pcbm-hybrid_{DATASET + '_' + str(scenario)}__{BACKBONE}__{CONCEPT}__lr-{0.01}__l2_penalty-{0.01}__seed-{SEED}.ckpt")
-    posthoc_h_layer = torch.load(hybrid_model_path)
-    posthoc_h_layer = posthoc_h_layer.eval()
-
-    hybrid_model = PosthocHybridCBM(posthoc_h_layer)
-    hybrid_model = hybrid_model.to(DEVICE)
-
-    train_embs, train_projs, train_lbls, test_embs, test_projs, test_lbls = load_or_compute_projections(BACKBONE, posthoc_h_layer, train_loader, test_loader, **kwargs)
-
-    norms = []
-    for idx, cls in hybrid_model.idx_to_class.items():
-        cls_weights = hybrid_model.classifier.weight[idx]
-        print(cls, cls_weights)
-        for j in cls_weights:
-            print(hybrid_model.names[j])
-
-        norms.append(torch.norm(cls_weights))
-
-        # Prune
-        if cls == config['class']:
-            prune_idx = hybrid_model.names.index(config['prune'])
-            hybrid_model.classifier.weight[idx][prune_idx] = 0
-
-    run_info_pcbm = evaluate_model(hybrid_model, test_loader, num_classes, **kwargs)
-    run_info_pcbm_h = evaluate_model(posthoc_h_layer, test_loader, num_classes, **kwargs)
-
-    prune[scenario]["pcbm"].append(run_info_pcbm["test_acc"])
-    prune[scenario]["pcbm-h"].append(run_info_pcbm_h["test_acc"])
-
-    # Prune + normalize
-    for idx, cls in hybrid_model.idx_to_class.items():
-        hybrid_model.classifier.weight[idx] = hybrid_model.classifier.weight[idx] / norms[-1]
-        
-    run_info_pcbm = evaluate_model(hybrid_model, test_loader, num_classes, **kwargs)
-    run_info_pcbm_h = evaluate_model(posthoc_h_layer, test_loader, num_classes, **kwargs)
-
-    prune_normalize[scenario]["pcbm"].append(run_info_pcbm["test_acc"])
-    prune_normalize[scenario]["pcbm-h"].append(run_info_pcbm_h["test_acc"])
-"""
 # Fine-tune
 
 write_statistics(unedited, "test_accuracy_unedited.json")
