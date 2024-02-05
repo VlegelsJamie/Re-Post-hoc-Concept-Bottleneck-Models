@@ -10,16 +10,16 @@ from PIL import Image
 from .constants import METASHIFT_DATA_DIR
 
 
-SCENARIOS = {1: {'train': 'bed(dog)', 'test': 'bed(cat)'},
-             2: {'train': 'bed(cat)', 'test': 'bed(dog)'},
-             3: {'train': 'table(dog)', 'test': 'table(cat)'},
-             4: {'train': 'table(cat)', 'test': 'table(dog)'},
-             5: {'train': 'table(books)', 'test': 'table(dog)'},
-             6: {'train': 'table(books)', 'test': 'table(cat)'},
-             7: {'train': 'car(dog)', 'test': 'car(cat)'},
-             8: {'train': 'car(cat)', 'test': 'car(dog)'},
-             9: {'train': 'cow(dog)', 'test': 'cow(cat)'},
-             10: {'train': 'keyboard(dog)', 'test': 'keyboard(cat)'},
+SCENARIOS = {0: {'train': 'bed(dog)', 'test': 'bed(cat)'},
+             1: {'train': 'bed(cat)', 'test': 'bed(dog)'},
+             2: {'train': 'table(dog)', 'test': 'table(cat)'},
+             3: {'train': 'table(cat)', 'test': 'table(dog)'},
+             4: {'train': 'table(books)', 'test': 'table(dog)'},
+             5: {'train': 'table(books)', 'test': 'table(cat)'},
+             6: {'train': 'car(dog)', 'test': 'car(cat)'},
+             7: {'train': 'car(cat)', 'test': 'car(dog)'},
+             8: {'train': 'cow(dog)', 'test': 'cow(cat)'},
+             9: {'train': 'keyboard(dog)', 'test': 'keyboard(cat)'},
 }
 
 
@@ -51,7 +51,7 @@ def load_metashift_data(preprocess, scenario, **kwargs):
     random.seed(kwargs['seed'])
 
     # Define task classes and scenario specific classes
-    if scenario in [1, 2, 7, 8, 9, 10]:
+    if scenario in [0, 1, 6, 7, 8, 9]:
         task = ["airplane", "bed", "car", "cow", "keyboard"]
     else:
         task = ["beach", "computer", "motorcycle", "stove", "table"]
@@ -61,20 +61,22 @@ def load_metashift_data(preprocess, scenario, **kwargs):
     # Load images for each class
     df_list_train = []
     df_list_val = []
-    for cls in task:
+    for i, cls in enumerate(task):
         directory = os.path.join(METASHIFT_DATA_DIR, cls)
         directory_spurious_train = os.path.join(METASHIFT_DATA_DIR, spurious_train_class)
         directory_spurious_test = os.path.join(METASHIFT_DATA_DIR, spurious_test_class)
         if cls == spurious_train_class.split('(')[0]:
-            df_list_train.append(load_images_from_dir(directory_spurious_train, label=spurious_train_class, n_samples=50))
-            df_list_val.append(load_images_from_dir(directory_spurious_test, label=spurious_test_class, n_samples=50))
+            df_list_train.append(load_images_from_dir(directory_spurious_train, label=i, n_samples=50))
+            df_list_val.append(load_images_from_dir(directory_spurious_test, label=i, n_samples=50))
         else:
-            df_list_train.append(load_images_from_dir(directory, label=task.index(cls), n_samples=50))
-            df_list_val.append(load_images_from_dir(directory, label=task.index(cls), n_samples=50))
+            df_list_train.append(load_images_from_dir(directory, label=i, n_samples=50))
+            df_list_val.append(load_images_from_dir(directory, label=i, n_samples=50))
 
     # Combine and shuffle datasets
     df_train = pd.concat(df_list_train).sample(frac=1).reset_index(drop=True)
     df_val = pd.concat(df_list_val).sample(frac=1).reset_index(drop=True)
+
+    print(df_train)
 
     # Index to class mapping
     idx_to_class = {i: cls for i, cls in enumerate(task)}

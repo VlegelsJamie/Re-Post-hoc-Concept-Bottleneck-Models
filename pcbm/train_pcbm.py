@@ -1,4 +1,3 @@
-import argparse
 import os
 import pickle
 import numpy as np
@@ -120,7 +119,7 @@ def run_linear_probe_binary(train_data, test_data, lam_norm, **kwargs):
     train_mAP = np.mean([average_precision_score(train_labels[:, i], train_probabilities[i][:, 1]) for i in range(train_labels.shape[1])])
     test_mAP = np.mean([average_precision_score(test_labels[:, i], test_probabilities[i][:, 1]) for i in range(test_labels.shape[1])])
 
-    run_info = {"train_mAP": train_mAP, "test_mAP": test_mAP}
+    run_info = {"train_acc": train_mAP, "test_acc": test_mAP}
 
     # Initialize lists to store the aggregated coefficients and intercepts
     aggregated_coefs = []
@@ -193,6 +192,7 @@ def get_pcbm(**kwargs):
         run_info_file = os.path.join(kwargs['validation'],
                               f"run_info-validation_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.pkl")
     else:
+        os.makedirs(kwargs['out_dir'], exist_ok=True)
         if kwargs['baseline']:
             model_path_baseline = os.path.join(kwargs['baseline'],
                                     f"baseline_{kwargs['dataset']}__{kwargs['backbone_name']}__lam-{kwargs['lam']}__alpha-{kwargs['alpha']}__seed-{kwargs['seed']}.ckpt")
@@ -211,7 +211,7 @@ def get_pcbm(**kwargs):
         if kwargs["backbone_name"] == "resnet18_cub" or kwargs["backbone_name"] == "ham10000_inception":
             run_info_baseline = evaluate_backbone(model, train_loader, test_loader, kwargs['device'])
         else:
-            lam_norm = kwargs["lam_baseline"] / num_classes
+            lam_norm = kwargs["lam_baseline"] / (num_classes * train_embs.shape[0])
 
             if kwargs['dataset'] == "coco":
                 run_info_baseline, coefs, intercepts, classifier_baseline = run_linear_probe_binary((train_embs, train_lbls), (test_embs, test_lbls), lam_norm, **kwargs)

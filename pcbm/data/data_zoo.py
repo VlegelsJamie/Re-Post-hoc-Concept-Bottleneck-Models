@@ -74,8 +74,8 @@ def get_dataset(preprocess=None, **kwargs):
 
     elif "metashift" in kwargs['dataset']:
         from .metashift import load_metashift_data
-        scenario = kwargs['dataset'].split("_")[1]
-        train_loader, test_loader, idx_to_class, classes = load_metashift_data(preprocess, scenario, **kwargs)
+        scenario = int(kwargs['dataset'].split("_")[1])
+        train_loader, test_loader, idx_to_class = load_metashift_data(preprocess, scenario, **kwargs)
         class_to_idx = {v:k for k,v in idx_to_class.items()}
         classes = list(class_to_idx.keys())
 

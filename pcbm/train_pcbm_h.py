@@ -43,8 +43,30 @@ def eval_model(posthoc_layer, loader, num_classes, **kwargs):
     return epoch_summary["Accuracy"].avg
 
 
-def train_hybrid(train_loader, val_loader, posthoc_layer, optimizer, num_classes, **kwargs):
-    cls_criterion = nn.CrossEntropyLoss()
+@torch.no_grad()
+def eval_model_binary(posthoc_layer, loader, num_classes, **kwargs):
+    epoch_summary = {"mAP": AverageMeter()}
+    tqdm_loader = tqdm(loader)
+    computer = MetricComputer(n_classes=num_classes)
+    
+    for batch_X, batch_Y in tqdm(loader):
+        batch_X, batch_Y = batch_X.to(kwargs['device']), batch_Y.to(kwargs['device'])
+        out = posthoc_layer(batch_X)
+        metrics = computer(out, batch_Y)
+        epoch_summary["mAP"].update(metrics["mean_average_precision"], batch_X.shape[0])
+        summary_text = [f"Avg. {k}: {v.avg:.3f}" for k, v in epoch_summary.items()]
+        summary_text = "Eval - " + " ".join(summary_text)
+        tqdm_loader.set_description(summary_text)
+    
+    return epoch_summary["mAP"].avg
+
+
+def train_hybrid(train_loader, val_loader, posthoc_layer, optimizer, num_classes, binary_loss=False, **kwargs):
+    if binary_loss:
+        cls_criterion = nn.BCEWithLogitsLoss()
+    else:
+        cls_criterion = nn.CrossEntropyLoss()
+
     for epoch in range(1, kwargs['num_epochs']+1):
         print(f"Epoch: {epoch}")
         epoch_summary = {"CELoss": AverageMeter(),
@@ -52,7 +74,13 @@ def train_hybrid(train_loader, val_loader, posthoc_layer, optimizer, num_classes
         tqdm_loader = tqdm(train_loader)
         computer = MetricComputer(n_classes=num_classes)
         for batch_X, batch_Y in tqdm(train_loader):
+            print(batch_X.shape, batch_Y.shape)
             batch_X, batch_Y = batch_X.to(kwargs['device']), batch_Y.to(kwargs['device'])
+
+            if binary_loss:
+                # Convert batch_Y to float for BCEWithLogitsLoss
+                batch_Y = batch_Y.float()
+
             optimizer.zero_grad()
             out, projections = posthoc_layer(batch_X, return_dist=True)
             cls_loss = cls_criterion(out, batch_Y)
@@ -62,7 +90,11 @@ def train_hybrid(train_loader, val_loader, posthoc_layer, optimizer, num_classes
             
             epoch_summary["CELoss"].update(cls_loss.detach().item(), batch_X.shape[0])
             metrics = computer(out, batch_Y) 
-            epoch_summary["Accuracy"].update(metrics["accuracy"], batch_X.shape[0])
+
+            if binary_loss:
+                epoch_summary["Accuracy"].update(metrics["mean_average_precision"], batch_X.shape[0])
+            else:
+                epoch_summary["Accuracy"].update(metrics["accuracy"], batch_X.shape[0])
 
             summary_text = [f"Avg. {k}: {v.avg:.3f}" for k, v in epoch_summary.items()]
             summary_text = " ".join(summary_text)
@@ -72,7 +104,10 @@ def train_hybrid(train_loader, val_loader, posthoc_layer, optimizer, num_classes
         latest_info["epoch"] = epoch
         latest_info["args"] = kwargs
         latest_info["train_acc"] = epoch_summary["Accuracy"]
-        latest_info["test_acc"] = eval_model(posthoc_layer, val_loader, num_classes, **kwargs)
+        if binary_loss:
+            latest_info["test_acc"] = eval_model_binary(posthoc_layer, val_loader, num_classes, **kwargs)
+        else:
+            latest_info["test_acc"] = eval_model(posthoc_layer, val_loader, num_classes, **kwargs)
         print("Final test acc: ", latest_info["test_acc"])
     return latest_info
 
@@ -105,8 +140,12 @@ def get_pcbm_h(**kwargs):
     hybrid_model.bottleneck = hybrid_model.bottleneck.float()
     
     # Train PCBM-h
-    run_info = train_hybrid(train_loader, test_loader, hybrid_model, hybrid_optimizer, num_classes, **kwargs)
+    if kwargs['dataset'] == "coco":
+        run_info = train_hybrid(train_loader, test_loader, hybrid_model, hybrid_optimizer, num_classes, binary_loss=True, **kwargs)
+    else:
+        run_info = train_hybrid(train_loader, test_loader, hybrid_model, hybrid_optimizer, num_classes, **kwargs)
     
+    os.makedirs(kwargs['out_dir'], exist_ok=True)
     conceptbank_source = kwargs['concept_bank'].split("/")[-1].split("_")[0]
     hybrid_model_path = os.path.join(kwargs['out_dir'],
                               f"pcbm-hybrid_{kwargs['dataset']}__{kwargs['backbone_name']}__{conceptbank_source}__lr-{kwargs['lr']}__l2_penalty-{kwargs['l2_penalty']}__seed-{kwargs['seed']}.ckpt")

@@ -40,8 +40,11 @@ class CocoDataset(Dataset):
         return X, y
 
 
-def process_images(image_folder_path, annotations_folder_path, target_classes):
-    image_data = []
+def process_images(image_folder_path, annotations_folder_path, target_classes, training_samples=500, test_samples=250):
+    # Initialize structures to track images per class
+    class_images = {class_id: [] for class_id in target_classes['ids']}
+
+    # Process each annotation file to collect image data
     for image_file in os.listdir(annotations_folder_path):
         if image_file.endswith('.png'):
             annotations_path = os.path.join(annotations_folder_path, image_file)
@@ -50,16 +53,58 @@ def process_images(image_folder_path, annotations_folder_path, target_classes):
             image = Image.open(annotations_path)
             image = np.array(image)
 
-            # Find unique labels in the image
+            # Find target labels in the image
             unique_labels = np.unique(image)
             target_labels = [label for label in unique_labels if label in target_classes['ids']]
-
-            # One-hot encode the labels
             encoded_labels = [1 if label in target_labels else 0 for label in target_classes['ids']]
 
-            image_data.append({'path': image_path, 'target': encoded_labels})
-    return image_data
-    
+            # Add image to respective class lists if it belongs to a target class
+            for label in target_labels:
+                class_images[label].append((image_path, encoded_labels))
+
+    # Upsample if necessary and split into training and test sets
+    training_data = []
+    test_data = []
+
+    for class_id, samples in class_images.items():
+        # Determine actual split sizes based on the available samples
+        total_samples = len(samples)
+        actual_training_samples = int(np.ceil(total_samples * 2/3))
+        actual_test_samples = total_samples - actual_training_samples
+
+        # Shuffle to ensure random distribution before splitting
+        np.random.shuffle(samples)
+
+        # Upsample training set if necessary
+        if actual_training_samples < training_samples:
+            additional_samples_needed = training_samples - actual_training_samples
+            samples_to_add = np.random.choice(samples, additional_samples_needed, replace=True)
+            training_upsampled = samples[:actual_training_samples] + list(samples_to_add)
+        else:
+            training_upsampled = samples[:actual_training_samples]
+
+        # Upsample test set if necessary
+        remaining_samples = samples[actual_training_samples:]
+        if actual_test_samples < test_samples:
+            additional_samples_needed = test_samples - actual_test_samples
+            samples_to_add = np.random.choice(remaining_samples, additional_samples_needed, replace=True)
+            test_upsampled = remaining_samples + list(samples_to_add)
+        else:
+            test_upsampled = remaining_samples
+
+        # Split based on predefined counts
+        train_images = training_upsampled[:training_samples]
+        test_images = test_upsampled[:test_samples]
+
+        # Create structured data for each set
+        for img_path, targets in train_images:
+            training_data.append({'path': img_path, 'target': targets})
+
+        for img_path, targets in test_images:
+            test_data.append({'path': img_path, 'target': targets})
+
+    return training_data, test_data
+
 
 def load_coco_data(preprocess, **kwargs):
     np.random.seed(kwargs['seed'])
@@ -70,20 +115,24 @@ def load_coco_data(preprocess, **kwargs):
                     "skateboard": 18, "baseball glove": 19}
     idx_to_class = {v: k for k, v in class_to_idx.items()}
 
-    processed_data_file = "trained_models/labels_coco.json"
+    train_data_file = "trained_models/labels_coco_train.json"
+    val_data_file = "trained_models/labels_coco_val.json"
 
     # Check if processed data file exists
-    if os.path.exists(processed_data_file):
-        with open(processed_data_file, 'r') as rf:
-            image_data = json.load(rf)
+    if os.path.exists(train_data_file) and os.path.exists(val_data_file):
+        with open(train_data_file, 'r') as rf:
+            train_data = json.load(rf)
+        
+        with open(val_data_file, 'r') as rf:
+            val_data = json.load(rf)
     else:
         os.makedirs("trained_models/", exist_ok=True)
-        image_data = process_images(COCO_IMAGES, COCO_ANNOTATIONS, target_classes)
-        with open(processed_data_file, 'w') as wf:
-            json.dump(image_data, wf)
+        train_data, val_data = process_images(COCO_IMAGES, COCO_ANNOTATIONS, target_classes)
+        with open(train_data_file, 'w') as wf:
+            json.dump(train_data, wf)
 
-    # Split the data into training and validation sets
-    train_data, val_data = train_test_split(image_data, test_size=0.33, random_state=kwargs.get('seed', 42))
+        with open(val_data_file, 'w') as wf:
+            json.dump(val_data, wf)
 
     # Create Datasets
     train_dataset = CocoDataset(train_data, preprocess=preprocess)

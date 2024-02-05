@@ -48,16 +48,16 @@ DATASET = "metashift"
 BACKBONE = "resnet50"
 CONCEPT = "broden"
 
-SCENARIOS = {1: {'class': 'bed', 'prune': 'dog'},
-             2: {'train': 'bed', 'test': 'cat'},
-             3: {'train': 'table', 'test': 'dog'},
-             4: {'train': 'table', 'test': 'cat'},
+SCENARIOS = {0: {'class': 'bed', 'prune': 'dog'},
+             1: {'train': 'bed', 'test': 'cat'},
+             2: {'train': 'table', 'test': 'dog'},
+             3: {'train': 'table', 'test': 'cat'},
+             4: {'train': 'table', 'test': 'books'},
              5: {'train': 'table', 'test': 'books'},
-             6: {'train': 'table', 'test': 'books'},
-             7: {'train': 'car', 'test': 'dog'},
-             8: {'train': 'car', 'test': 'cat'},
-             9: {'train': 'cow', 'test': 'dog'},
-             10: {'train': 'keyboard', 'test': 'dog'},
+             6: {'train': 'car', 'test': 'dog'},
+             7: {'train': 'car', 'test': 'cat'},
+             8: {'train': 'cow', 'test': 'dog'},
+             9: {'train': 'keyboard', 'test': 'dog'},
 }
 
 # Initialize test accuracy dictionaries

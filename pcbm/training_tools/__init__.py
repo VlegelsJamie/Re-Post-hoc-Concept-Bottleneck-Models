@@ -1,5 +1,6 @@
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, average_precision_score
 import numpy as np
+import torch
 from .embedding_tools import load_or_compute_projections
 
 
@@ -24,7 +25,8 @@ class MetricComputer(object):
     def __init__(self, metric_names=None, n_classes=5):
         __all_metrics__ = {"accuracy": self._accuracy, 
                             "class-level-accuracy": self._class_level_accuracy,
-                            "confusion_matrix": self._confusion_matrix}
+                            "confusion_matrix": self._confusion_matrix,
+                            "mean_average_precision": self._mean_average_precision}
         all_names = list(__all_metrics__.keys())
         if metric_names is None:
             metric_names = all_names
@@ -38,8 +40,15 @@ class MetricComputer(object):
             out (torch.Tensor): Model output
             target (torch.Tensor): Target labels
         """
-        pred = out.argmax(dim=1)
-        result = {m: self.metrics[m](out, pred, target) for m in self.metrics.keys()}
+        print(out.shape, target.shape)
+
+        if out.shape[1] != 1:
+            pred = torch.sigmoid(out)
+            result = {self.metrics["mean_average_precision"](pred, target)}
+        else:
+            pred = out.argmax(dim=1)
+            result = {m: self.metrics[m](out, pred, target) for m in self.metrics.keys() if m != "mean_average_precision"}
+    
         return result
     
     def _accuracy(self, out, pred, target):
@@ -60,3 +69,8 @@ class MetricComputer(object):
         y_true = target.detach().cpu()
         y_pred = pred.detach().cpu()
         return confusion_matrix(y_true, y_pred, normalize=None, labels=np.arange(self.n_classes))
+    
+    def _mean_average_precision(self, pred, target):
+        # Compute mean average precision
+        average_precision = average_precision_score(target.cpu().numpy(), pred.cpu().numpy(), average="macro")
+        return average_precision

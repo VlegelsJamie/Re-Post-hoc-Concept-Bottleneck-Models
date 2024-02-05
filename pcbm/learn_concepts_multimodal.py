@@ -7,6 +7,8 @@ import argparse
 import numpy as np
 from tqdm import tqdm
 
+from pcbm.data.data_zoo import get_dataset
+
 
 concept_cache = {}
 
@@ -129,7 +131,7 @@ def learn_conceptbank(model, concept_list, scenario, **kwargs):
 
 def get_concepts_multimodal(**kwargs):
     clip_backbone_name = kwargs['backbone_name'].split("-")[1]
-    model, _ = clip.load(clip_backbone_name, device=kwargs['device'], download_root=kwargs['out_dir'])
+    model, preprocess = clip.load(clip_backbone_name, device=kwargs['device'], download_root=kwargs['out_dir'])
     
     if kwargs['classes'] == "cifar10":
         # Pull CIFAR10 to get the class names.
@@ -155,6 +157,19 @@ def get_concepts_multimodal(**kwargs):
         from torchvision import datasets
         cifar100_ds = datasets.CIFAR100(root=kwargs['out_dir'], train=True, download=True)
         all_classes = list(cifar100_ds.classes)
+        all_concepts = get_concept_data(all_classes)
+        all_concepts = clean_concepts(all_concepts, kwargs['out_dir'].split("/")[0])
+        all_concepts = list(set(all_concepts).difference(set(all_classes)))
+        # If we'd like to recurse in the conceptnet graph, specify `recurse > 1`.
+        for i in range(1, kwargs['recurse']):
+            all_concepts = get_concept_data(all_concepts)
+            all_concepts = list(set(all_concepts))
+            all_concepts = clean_concepts(all_concepts, kwargs['out_dir'].split("/")[0])
+            all_concepts = list(set(all_concepts).difference(set(all_classes)))
+        learn_conceptbank(model, all_concepts, kwargs['classes'], **kwargs)
+
+    elif kwargs['classes'] == "coco":
+        _, _, _, all_classes = get_dataset(preprocess, **kwargs)
         all_concepts = get_concept_data(all_classes)
         all_concepts = clean_concepts(all_concepts, kwargs['out_dir'].split("/")[0])
         all_concepts = list(set(all_concepts).difference(set(all_classes)))

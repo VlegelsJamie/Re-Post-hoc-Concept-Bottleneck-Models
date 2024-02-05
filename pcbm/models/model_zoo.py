@@ -61,10 +61,7 @@ def get_model(backbone_name="resnet18_cub", full_model=False, **kwargs):
         # Load the pretrained ResNet50 model
         model = models.resnet50(pretrained=True)
 
-        # Copy the model to create the backbone
-        backbone = models.resnet50(pretrained=True)
-        # Remove the last fully connected layer to get the backbone
-        backbone = torch.nn.Sequential(*(list(backbone.children())[:-1]))
+        backbone = ResNetBottom(model)
 
         # Preprocessing steps
         preprocess = transforms.Compose([

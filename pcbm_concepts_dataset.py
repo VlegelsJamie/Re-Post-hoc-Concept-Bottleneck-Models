@@ -13,7 +13,7 @@ CONCEPT_BANK_DIR = "trained_models/concept_banks/experiment_conceptdataset/"
 BASELINE_DIR = "trained_models/baseline_models/experiment_conceptdataset/"
 PCBM_MODELS_DIR = "trained_models/pcbm_models/experiment_conceptdataset/"
 PCBM_H_MODELS_DIR = "trained_models/pcbm_h_models/experiment_conceptdataset/"
-NUM_SEEDS = 10
+NUM_SEEDS = 1
 C_VALUES = [0.001, 0.01, 0.1, 1.0, 10.0]
 N_SAMPLES = 50
 ALPHA = 0.99
@@ -28,12 +28,12 @@ LAM_VALUES = {
 
 # Datasets and their configurations
 DATASETS = {
-    "cifar10": {"backbone": "clip-RN50", "concept": "broden"},
-    "cifar100": {"backbone": "clip-RN50", "concept": "broden"},
+    #"cifar10": {"backbone": "clip-RN50", "concept": "broden"},
+    #"cifar100": {"backbone": "clip-RN50", "concept": "broden"},
     "coco": {"backbone": "clip-RN50", "concept": "broden"},
-    "cub": {"backbone": "resnet18_cub", "concept": "cub"},
-    "ham10000": {"backbone": "ham10000_inception", "concept": "derm7pt"},
-    "isic": {"backbone": "ham10000_inception", "concept": "derm7pt"},
+    #"cub": {"backbone": "resnet18_cub", "concept": "cub"},
+    #"ham10000": {"backbone": "ham10000_inception", "concept": "derm7pt"},
+    #"isic": {"backbone": "ham10000_inception", "concept": "derm7pt"},
 }
 
 SEED = 42
@@ -78,7 +78,7 @@ for seed in random_seeds:
         )
         test_accs[dataset]["baseline"].append(run_info_baseline["test_acc"])
         test_accs[dataset]["pcbm"].append(run_info_pcbm["test_acc"])
-
+        
         run_info_pcbm_h = get_pcbm_h(
             out_dir=PCBM_H_MODELS_DIR,
             pcbm_path=model_path,

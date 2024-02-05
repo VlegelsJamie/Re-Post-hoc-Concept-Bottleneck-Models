@@ -16,8 +16,7 @@ VALIDATION_DIR = "trained_models/validation_models/experiment_conceptdataset/"
 C_VALUES = [0.001, 0.01, 0.1, 1.0, 10.0]
 N_SAMPLES = [10, 25, 50]
 ALPHA = 0.99
-LAM_SEARCH_VALUES_PCBM = [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0]
-LAM_SEARCH_VALUES_BASELINE = [1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5]
+LAM_SEARCH_VALUES = [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0]
 
 # Fixed seed
 SEED = 42
@@ -26,14 +25,14 @@ SEED = 42
 DATASETS = {
     "cifar10": {"backbone": "clip-RN50", "concept": "broden"},
     "cifar100": {"backbone": "clip-RN50", "concept": "broden"},
-    "coco-stuff": {"backbone": "clip-RN50", "concept": "broden"},
+    "coco": {"backbone": "clip-RN50", "concept": "broden"},
     "cub": {"backbone": "resnet18_cub", "concept": "cub"},
     "ham10000": {"backbone": "ham10000_inception", "concept": "derm7pt"},
     "siim-isic": {"backbone": "ham10000_inception", "concept": "derm7pt"},
 }
 
 # Initialize test accuracy dictionaries
-val_accs = {n_samples: {dataset: {"baseline": {lam: [] for lam in LAM_SEARCH_VALUES_BASELINE}, "pcbm": {lam: [] for lam in LAM_SEARCH_VALUES_PCBM}} for dataset in DATASETS} for n_samples in N_SAMPLES}
+val_accs = {n_samples: {dataset: {"baseline": {lam: [] for lam in LAM_SEARCH_VALUES}, "pcbm": {lam: [] for lam in LAM_SEARCH_VALUES}} for dataset in DATASETS} for n_samples in N_SAMPLES}
 
 for n_samples in N_SAMPLES:
     for dataset, config in DATASETS.items():
@@ -53,7 +52,7 @@ for n_samples in N_SAMPLES:
                 n_samples=n_samples
             )
 
-        for lam_value_pcbm, lam_value_baseline in zip(LAM_SEARCH_VALUES_PCBM, LAM_SEARCH_VALUES_BASELINE):
+        for lam_value in LAM_SEARCH_VALUES:
             run_info_pcbm, run_info_baseline = get_pcbm(
                 baseline=BASELINE_DIR, 
                 validation=VALIDATION_DIR,
@@ -66,11 +65,11 @@ for n_samples in N_SAMPLES:
                 batch_size=BATCH_SIZE, 
                 num_workers=NUM_WORKERS, 
                 alpha=ALPHA, 
-                lam=lam_value_pcbm,
-                lam_baseline=lam_value_baseline
+                lam=lam_value,
+                lam_baseline=lam_value
             )
-            val_accs[n_samples][dataset]["baseline"][lam_value_baseline].append(run_info_baseline["test_acc"])
-            val_accs[n_samples][dataset]["pcbm"][lam_value_pcbm].append(run_info_pcbm["test_acc"])
+            val_accs[n_samples][dataset]["baseline"][lam_value].append(run_info_baseline["test_acc"])
+            val_accs[n_samples][dataset]["pcbm"][lam_value].append(run_info_pcbm["test_acc"])
 
 os.makedirs("results/", exist_ok=True)
 with open("results/hyperparameter_search.json", 'w') as file:
